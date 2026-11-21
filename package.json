@@ -1,26 +1,35 @@
 {
-  "name": "liquor",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "next": "16.4.6",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/turbopack": "4.3.3",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.4.6",
-    "tailwindcss": "4.3.3",
-    "typescript": "^5"
-  }
+    "name": "liquor",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "eslint",
+        "db": "tsx scripts/local-db.ts",
+        "sync": "tsx scripts/sync.ts",
+        "typecheck": "tsc --noEmit",
+        "images:link": "tsx scripts/link-images.ts"
+    },
+    "dependencies": {
+        "exceljs": "^4.4.0",
+        "mongodb": "^7.9.1",
+        "next": "16.4.6",
+        "react": "19.3.0",
+        "react-dom": "19.3.0"
+    },
+    "devDependencies": {
+        "@tailwindcss/turbopack": "4.3.3",
+        "@types/node": "^20",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "dotenv": "^18.0.10",
+        "eslint": "^9",
+        "eslint-config-next": "16.4.6",
+        "mongodb-memory-server-core": "^11.3.0",
+        "tailwindcss": "4.3.3",
+        "tsx": "^4.23.15",
+        "typescript": "^5"
+    }
 }

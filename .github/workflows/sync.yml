@@ -1,0 +1,33 @@
+# Optional backup for the Vercel cron: runs the same sync from GitHub's servers.
+# Enable by adding repository secrets MONGODB_URI, REVALIDATE_SECRET and
+# SITE_URL_FOR_REVALIDATE (Settings > Secrets and variables > Actions).
+# Useful if the Vercel function ever times out or the source is slow.
+name: Sync prices
+
+on:
+  schedule:
+    - cron: "0 22 * * *" # 03:30 IST, 30 min after the Vercel cron
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rewrite data even if the source is unchanged"
+        type: boolean
+        default: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run sync -- ${{ inputs.force && '--force' || '' }}
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGODB_DB: liquor
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          SITE_URL_FOR_REVALIDATE: ${{ secrets.SITE_URL_FOR_REVALIDATE }}
