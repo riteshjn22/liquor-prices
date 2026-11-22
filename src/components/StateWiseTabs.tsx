@@ -56,9 +56,9 @@ export function StateWiseTabs({ brandName, tables, children }: { brandName: stri
             <table className="price-table [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-3 sm:[&_th]:px-3">
               <thead>
                 <tr>
-                  <th className="sticky left-0 bg-tile">State</th>
+                  <th className="sticky left-0 w-36 bg-tile sm:w-56">State</th>
                   {t.sizes.map((s) => (
-                    <th key={s.ml} className="whitespace-nowrap text-right">
+                    <th key={s.ml} className="whitespace-nowrap border-l border-line !text-left">
                       {s.label}
                     </th>
                   ))}
@@ -76,7 +76,7 @@ export function StateWiseTabs({ brandName, tables, children }: { brandName: stri
                       )}
                     </td>
                     {r.cells.map((c, j) => (
-                      <td key={t.sizes[j].ml} className="whitespace-nowrap text-right font-bold">
+                      <td key={t.sizes[j].ml} className="whitespace-nowrap border-l border-line text-left font-bold">
                         {c === null ? <span className="font-normal text-slate-300">—</span> : inr.format(c)}
                       </td>
                     ))}
