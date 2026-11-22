@@ -136,8 +136,9 @@ export async function getBrandPage(category: string, slug: string): Promise<Bran
   const [products, statePrices] = await Promise.all([
     db
       .collection<ProductDoc>(COLLECTIONS.products)
-      .find({ brandKey: brand.key }, { projection: { _id: 0, key: 1, state: 1, name: 1, label: 1, typeName: 1, isCurrent: 1, latestFy: 1, sizes: 1 } })
-      .sort({ isCurrent: -1, name: 1 })
+      // Only products on the current excise list; older listings are never shown.
+      .find({ brandKey: brand.key, isCurrent: true }, { projection: { _id: 0, key: 1, state: 1, name: 1, label: 1, typeName: 1, isCurrent: 1, latestFy: 1, sizes: 1 } })
+      .sort({ name: 1 })
       .toArray(),
     db.collection<StatePrice>(COLLECTIONS.statePrices).find({ brandKey: brand.key }, { projection: { _id: 0 } }).sort({ state: 1, variant: 1, ml: 1 }).toArray(),
   ]);

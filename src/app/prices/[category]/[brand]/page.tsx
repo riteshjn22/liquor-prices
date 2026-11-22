@@ -148,7 +148,7 @@ function StateMatrix({ brandName, m }: { brandName: string; m: Matrix }) {
   );
 }
 
-type StateSection = { slug: string; name: string; official: OfficialRow[]; older: DisplayProduct[]; manual: StatePrice[]; source?: { name: string; url: string } };
+type StateSection = { slug: string; name: string; official: OfficialRow[]; manual: StatePrice[]; source?: { name: string; url: string } };
 
 function buildSections(page: BrandPage): StateSection[] {
   const map = new Map<string, StateSection>();
@@ -156,7 +156,7 @@ function buildSections(page: BrandPage): StateSection[] {
     let s = map.get(slug);
     if (!s) {
       const cfg = getStateConfig(slug);
-      s = { slug, name: stateName(slug), official: [], older: [], manual: [], source: cfg ? { name: cfg.sourceName, url: cfg.sourceUrl } : undefined };
+      s = { slug, name: stateName(slug), official: [], manual: [], source: cfg ? { name: cfg.sourceName, url: cfg.sourceUrl } : undefined };
       map.set(slug, s);
     }
     return s;
@@ -165,12 +165,12 @@ function buildSections(page: BrandPage): StateSection[] {
     const ps = page.products.filter((p) => p.state === state);
     const s = get(state);
     s.official = officialRows(ps);
-    s.older = ps.filter((p) => !p.isCurrent);
   }
   for (const sp of page.statePrices) get(sp.state).manual.push(sp);
   // Official sources first, then other states A-Z.
   return [...map.values()]
-    .filter((s) => s.official.length || s.manual.length || s.older.length)
+    // A state appears only if it has current official prices or prices you added.
+    .filter((s) => s.official.length || s.manual.length)
     .sort((a, b) => Number(!!b.source) - Number(!!a.source) || a.name.localeCompare(b.name));
 }
 
@@ -410,20 +410,6 @@ async function BrandContent({ params }: Pick<Props, "params">) {
                       </p>
                       <ManualTable rows={s.manual} />
                     </>
-                  )}
-                  {s.older.length > 0 && (
-                    <details className="mt-3 text-sm">
-                      <summary className="cursor-pointer text-link">
-                        {s.older.length} variant{s.older.length === 1 ? "" : "s"} no longer on the current {s.name} list
-                      </summary>
-                      <ul className="mt-2 list-disc pl-5 text-muted">
-                        {s.older.map((p) => (
-                          <li key={p.key}>
-                            {p.variant}: last listed FY {fyLabel(p.latestFy)} ({p.sizes.map((x) => `${x.label} ${formatINR(x.mrp)}`).join(", ")})
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
                   )}
                 </section>
               ))}
