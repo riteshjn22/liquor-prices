@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Category = { slug: string; name: string };
-type BrandRow = { key: string; category: string; name: string; enabled: boolean; priceText: string; priceNote: string; products: number; statePrices: number };
+type BrandRow = { key: string; category: string; name: string; enabled: boolean; featured: boolean; priceText: string; priceNote: string; products: number; statePrices: number };
+
+/** How many popular brands the home page shows (see getPopularBrands). */
+const HOME_POPULAR_LIMIT = 12;
 
 type Issue = { sheet: string; row: number; message: string };
 type Change = { key: string; brand: string; field: string; from: string; to: string };
@@ -55,7 +58,7 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("");
-  const [status, setStatus] = useState<"" | "on" | "off">("");
+  const [status, setStatus] = useState<"" | "on" | "off" | "popular">("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
 
@@ -80,18 +83,18 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
     return (brands ?? []).filter(
       (b) =>
         (!cat || b.category === cat) &&
-        (!status || (status === "on") === b.enabled) &&
+        (!status || (status === "popular" ? b.featured : (status === "on") === b.enabled)) &&
         words.every((w) => b.name.toLowerCase().includes(w) || b.key.includes(w)),
     );
   }, [brands, q, cat, status]);
 
-  async function setEnabled(keys: string[], enabled: boolean) {
+  async function update(keys: string[], patch: { enabled: boolean } | { featured: boolean }) {
     if (!keys.length || !brands) return;
     const before = brands;
-    setBrands(brands.map((b) => (keys.includes(b.key) ? { ...b, enabled } : b))); // optimistic
+    setBrands(brands.map((b) => (keys.includes(b.key) ? { ...b, ...patch } : b))); // optimistic
     setSaving(true);
     try {
-      const res = await fetch("/api/admin/brands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keys, enabled }) });
+      const res = await fetch("/api/admin/brands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keys, ...patch }) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setError(null);
     } catch (e) {
@@ -102,7 +105,10 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
     }
   }
 
+  const setEnabled = (keys: string[], enabled: boolean) => update(keys, { enabled });
+  const setFeatured = (keys: string[], featured: boolean) => update(keys, { featured });
   const enabledCount = brands?.filter((b) => b.enabled).length ?? 0;
+  const popular = brands?.filter((b) => b.featured && b.enabled) ?? [];
   const allShownSelected = shown.length > 0 && shown.every((b) => selected.has(b.key));
   const targetKeys = selected.size ? [...selected] : shown.map((b) => b.key);
 
@@ -117,7 +123,19 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
           </span>
         )}
       </div>
-      <p className="mt-1 text-sm text-muted">Only enabled brands appear on the website, in search and in the sitemap. Changes are live immediately.</p>
+      <p className="mt-1 text-sm text-muted">Only enabled brands appear on the website and in the sitemap. Changes are live immediately.</p>
+      {brands && (
+        <p className={`mt-2 rounded-md px-3 py-2 text-sm ${popular.length ? "bg-amber-50 text-amber-900" : "bg-tile text-muted"}`}>
+          {popular.length ? (
+            <>
+              <b>★ {popular.length} popular brand{popular.length === 1 ? "" : "s"}</b> on the home page
+              {popular.length > HOME_POPULAR_LIMIT && ` (the first ${HOME_POPULAR_LIMIT} A–Z are shown)`}. Unmark them all to go back to the automatic list.
+            </>
+          ) : (
+            <>No brands marked ★ Popular, so the home page picks them automatically (brands with the most Delhi variants). Click a ★ to choose your own.</>
+          )}
+        </p>
+      )}
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search brands" className="w-56 rounded-lg border border-line px-3 py-1.5 text-sm" />
@@ -129,10 +147,11 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
             </option>
           ))}
         </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value as "" | "on" | "off")} className="rounded-lg border border-line px-2 py-1.5 text-sm">
+        <select value={status} onChange={(e) => setStatus(e.target.value as "" | "on" | "off" | "popular")} className="rounded-lg border border-line px-2 py-1.5 text-sm">
           <option value="">Enabled and disabled</option>
           <option value="on">Enabled only</option>
           <option value="off">Disabled only</option>
+          <option value="popular">★ Popular only</option>
         </select>
         <div className="ml-auto flex flex-wrap gap-2">
           <button onClick={() => setEnabled(targetKeys, true)} disabled={!shown.length || saving} className="rounded-lg bg-green-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
@@ -141,6 +160,16 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
           <button onClick={() => setEnabled(targetKeys, false)} disabled={!shown.length || saving} className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
             Disable {selected.size ? `${selected.size} selected` : `all ${shown.length} shown`}
           </button>
+          {selected.size > 0 && (
+            <>
+              <button onClick={() => setFeatured([...selected], true)} disabled={saving} className="rounded-lg bg-gold px-3 py-1.5 text-sm font-bold text-navy disabled:opacity-40">
+                ★ Mark {selected.size} popular
+              </button>
+              <button onClick={() => setFeatured([...selected], false)} disabled={saving} className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-semibold text-ink disabled:opacity-40">
+                Unmark {selected.size}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -166,6 +195,7 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
                   />
                 </th>
                 <th>On</th>
+                <th title="Shown in Popular Brands on the home page">Popular</th>
                 <th>Brand</th>
                 <th className="hidden sm:table-cell">Category</th>
                 <th className="hidden md:table-cell">Price range</th>
@@ -197,6 +227,18 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
                     <Toggle on={b.enabled} onChange={(v) => setEnabled([b.key], v)} label={`${b.enabled ? "Disable" : "Enable"} ${b.name}`} />
                   </td>
                   <td>
+                    <button
+                      type="button"
+                      aria-pressed={b.featured}
+                      aria-label={`${b.featured ? "Remove" : "Mark"} ${b.name} ${b.featured ? "from" : "as"} popular`}
+                      title={b.enabled ? (b.featured ? "Popular: shown on the home page" : "Mark as popular") : "Enable the brand to show it on the home page"}
+                      onClick={() => setFeatured([b.key], !b.featured)}
+                      className={`text-xl leading-none transition ${b.featured ? "text-gold" : "text-slate-300 hover:text-gold"}`}
+                    >
+                      {b.featured ? "★" : "☆"}
+                    </button>
+                  </td>
+                  <td>
                     {b.enabled ? (
                       <a href={`/prices/${b.key}`} target="_blank" rel="noopener" className="font-semibold text-ink hover:text-link hover:underline">
                         {b.name}
@@ -217,7 +259,7 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
               ))}
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-muted">
+                  <td colSpan={8} className="py-6 text-center text-muted">
                     No brands match these filters.
                   </td>
                 </tr>

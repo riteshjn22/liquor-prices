@@ -173,17 +173,31 @@ export async function getRelatedBrands(category: string, slug: string, price: nu
   return summarize(sorted);
 }
 
-/** Brands with the most official products first: usually the best-known ones. */
+/**
+ * Home page "Popular Brands".
+ * 1. Brands you marked Popular in the admin (A-Z, up to `limit`).
+ * 2. If none are marked: brands with the most official products first, topped up
+ *    with priced brands from your list.
+ */
 export async function getPopularBrands(limit = 12, category?: string): Promise<BrandSummary[]> {
   "use cache";
   cached();
   const db = await getDb();
+  const chosen = (await db
+    .collection<BrandDoc>(COLLECTIONS.brands)
+    .find({ ...ENABLED, featured: true, ...(category ? { category } : {}) }, { projection: BRAND_PROJECTION })
+    .collation({ locale: "en" })
+    .sort({ name: 1 })
+    .limit(limit)
+    .toArray()) as unknown as BrandRow[];
+  if (chosen.length) return summarize(chosen);
+
   const counts = await db
     .collection<ProductDoc>(COLLECTIONS.products)
     .aggregate<{ _id: string; n: number }>([
       { $match: { brandKey: { $ne: null }, isCurrent: true, ...(category ? { brandKey: { $regex: `^${category}/` } } : {}) } },
       { $group: { _id: "$brandKey", n: { $sum: 1 } } },
-      { $sort: { n: -1 } },
+      { $sort: { n: -1, _id: 1 } }, // ties in a fixed order, so the list doesn't shuffle between builds
       { $limit: limit * 3 },
     ])
     .toArray();

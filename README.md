@@ -71,6 +71,10 @@ A table of every brand with an **on/off switch**, search, category and status fi
 **Enable / Disable** for the selected (or all filtered) brands. Only enabled brands appear on the site, in
 search and in the sitemap; a disabled brand's page returns 404. Changes are live immediately.
 
+**Popular brands:** click the ★ in the table (or select brands and press *Mark popular*, or set **Popular** to `yes` in the Excel) to choose
+the home page's *Popular Brands* (up to 12, A–Z). If none are marked, the home page picks them automatically: brands with the
+most variants on the current Delhi list.
+
 New brands start enabled. Delhi products are only ever shown inside a brand page, so a product that
 doesn't belong to one of your brands never appears on the site.
 

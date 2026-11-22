@@ -124,7 +124,9 @@ export type BrandDoc = {
   slug: string; // never changes once created (keeps URLs stable)
   name: string;
   enabled: boolean;
-  /** Approximate India price range as typed in Excel, e.g. "?500 – ?800". */
+  /** Picked in the admin for the home page "Popular Brands" list. */
+  featured?: boolean;
+  /** Approximate India price range as typed in Excel, e.g. "Rs 500 - Rs 800". */
   priceText: string;
   priceMin: number | null;
   priceMax: number | null;

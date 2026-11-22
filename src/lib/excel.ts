@@ -23,6 +23,7 @@ export const BRAND_COLS = {
   category: "Category",
   name: "Brand name",
   enabled: "Enabled",
+  popular: "Popular",
   price: "Price range in India",
   note: "Price note",
   description: "Description",
@@ -57,7 +58,7 @@ export const PRODUCT_COLS = {
   label: "Variant name",
 } as const;
 
-const BRAND_EDITABLE = new Set<string>([BRAND_COLS.category, BRAND_COLS.name, BRAND_COLS.enabled, BRAND_COLS.price, BRAND_COLS.note, BRAND_COLS.description, BRAND_COLS.seoTitle, BRAND_COLS.seoDescription, BRAND_COLS.image, BRAND_COLS.matchWords]);
+const BRAND_EDITABLE = new Set<string>([BRAND_COLS.category, BRAND_COLS.name, BRAND_COLS.enabled, BRAND_COLS.popular, BRAND_COLS.price, BRAND_COLS.note, BRAND_COLS.description, BRAND_COLS.seoTitle, BRAND_COLS.seoDescription, BRAND_COLS.image, BRAND_COLS.matchWords]);
 const PRODUCT_EDITABLE = new Set<string>([PRODUCT_COLS.assign, PRODUCT_COLS.label]);
 
 const LIMITS = { name: 120, description: 5000, seoTitle: 120, seoDescription: 320, text: 200, maxMrp: 10_000_000 };
@@ -113,6 +114,7 @@ export async function buildWorkbook({ brands, statePrices, products }: ExportInp
     ["Brands sheet: one row per brand (one page each, e.g. /prices/rum/old-monk)", true],
     ["Add a brand: add a row with Category (" + CATEGORIES.map((c) => c.slug).join(", ") + ") and Brand name, leave the Key blank."],
     ["Enabled: 'yes' shows the brand on the site, 'no' hides it (its page returns 404)."],
+    ["Popular: 'yes' puts the brand in Popular Brands on the home page (up to 12, A-Z). If no brand is marked, the home page picks them automatically."],
     ["Price range in India: e.g. ₹700 – ₹950. Shown as an approximate range. Price note: optional short note, e.g. 'Varietal'."],
     ["Match words: extra names used to find this brand in the Delhi excise list, comma-separated, e.g. 'mc dowells, mcdowell no 1'."],
     ["Description / SEO title / SEO description / Image path: optional content for the brand page."],
@@ -144,6 +146,7 @@ export async function buildWorkbook({ brands, statePrices, products }: ExportInp
       [BRAND_COLS.category]: b.category,
       [BRAND_COLS.name]: b.name,
       [BRAND_COLS.enabled]: b.enabled ? "yes" : "no",
+      [BRAND_COLS.popular]: b.featured ? "yes" : "",
       [BRAND_COLS.price]: b.priceText ?? "",
       [BRAND_COLS.note]: b.priceNote ?? "",
       [BRAND_COLS.description]: b.description ?? "",
@@ -156,12 +159,14 @@ export async function buildWorkbook({ brands, statePrices, products }: ExportInp
     });
     fillEditable(row, BRAND_EDITABLE);
     row.getCell(BRAND_COLS.enabled).dataValidation = YES_NO;
+    row.getCell(BRAND_COLS.popular).dataValidation = YES_NO;
     row.getCell(BRAND_COLS.category).dataValidation = { type: "list", allowBlank: false, formulae: [`"${CATEGORIES.map((c) => c.slug).join(",")}"`] };
   }
   styleSheet(bws, BRAND_EDITABLE, {
     [BRAND_COLS.key]: 30,
     [BRAND_COLS.name]: 28,
     [BRAND_COLS.enabled]: 9,
+    [BRAND_COLS.popular]: 9,
     [BRAND_COLS.price]: 22,
     [BRAND_COLS.description]: 45,
     [BRAND_COLS.seoTitle]: 32,
@@ -271,6 +276,7 @@ const show = (v: unknown) => {
 const FIELD_LABELS: Partial<Record<keyof BrandDoc, string>> = {
   name: "Brand name",
   enabled: "Enabled",
+  featured: "Popular",
   priceText: "Price range",
   priceNote: "Price note",
   description: "Description",
@@ -336,7 +342,7 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
         if (same(before, value)) continue;
         (diff as Record<string, unknown>)[field] = value;
         if (field === "priceMin" || field === "priceMax") continue; // shown via priceText
-        plan.changes.push({ key, brand: label, field: FIELD_LABELS[field] ?? field, from: show(field === "enabled" ? (before ? "yes" : "no") : before), to: show(field === "enabled" ? (value ? "yes" : "no") : value) });
+        plan.changes.push({ key, brand: label, field: FIELD_LABELS[field] ?? field, from: show(field === "enabled" || field === "featured" ? (before ? "yes" : "no") : before), to: show(field === "enabled" || field === "featured" ? (value ? "yes" : "no") : value) });
       }
     }
     if (!Object.keys(diff).length) return;
@@ -432,6 +438,12 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
         if (enabled === null) return void err(`Enabled must be "yes" or "no" (got "${get(BRAND_COLS.enabled)}").`);
         if (enabled !== undefined) set.enabled = enabled;
         else if (opts.fullList) set.enabled = true; // in the full list and not marked "no" -> show it
+
+        const popular = parseYesNo(get(BRAND_COLS.popular) ?? "");
+        if (popular === null) return void err(`Popular must be "yes" or blank (got "${get(BRAND_COLS.popular)}").`);
+        // Column present: blank or "no" un-marks the brand. Column missing: leave as is.
+        // Only record a real change, so brands never marked don't show up as "no -> no".
+        if (get(BRAND_COLS.popular) !== undefined && (popular === true) !== (existing?.featured === true)) set.featured = popular === true;
 
         const priceCell = get(BRAND_COLS.price);
         if (priceCell !== undefined) Object.assign(set, priceFields(priceCell, get(BRAND_COLS.note)));
