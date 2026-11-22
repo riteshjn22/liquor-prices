@@ -9,6 +9,7 @@ import { RichText } from "@/components/RichText";
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { SITE_URL } from "@/lib/config";
 import { getBrandsByCategory, getFaqs, getPageContent } from "@/lib/data";
+import { pageMetadata, webPageLd } from "@/lib/seo";
 import type { BrandSummary } from "@/lib/types";
 
 // Crawlers always get complete HTML.
@@ -25,14 +26,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const cat = getCategory(category);
   if (!cat) return {};
   const brands = await getBrandsByCategory(category);
-  return {
-    title: `${cat.name} Prices in India: ${brands.length} Brands & Price Ranges`,
-    description: `Compare ${cat.name.toLowerCase()} prices in India for ${brands.length} brands${
-      brands.length ? ` including ${brands.slice(0, 4).map((b) => b.name).join(", ")}` : ""
-    }. Price ranges and official state MRPs by bottle size.`,
-    alternates: { canonical: `/prices/${category}` },
-  };
+  return pageMetadata({ title: categoryTitle(cat.name, brands.length), description: categoryDescription(cat.name, brands), path: `/prices/${category}`, ownImageFile: true });
 }
+
+const categoryTitle = (name: string, count: number) => `${name} Prices in India: ${count} Brands & Price Ranges`;
+const categoryDescription = (name: string, brands: BrandSummary[]) =>
+  `Compare ${name.toLowerCase()} prices in India for ${brands.length} brands${
+    brands.length ? ` including ${brands.slice(0, 4).map((b) => b.name).join(", ")}` : ""
+  }. Price ranges and state-wise prices by bottle size.`;
 
 function letterOf(name: string) {
   const c = name.trim().charAt(0).toUpperCase();
@@ -120,13 +121,21 @@ async function CategoryContent({ params }: Pick<Props, "params">) {
       <Faq items={faqs} />
 
       <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "ItemList",
-          name: `${cat.name} brands in India`,
-          numberOfItems: brands.length,
-          itemListElement: brands.slice(0, 100).map((b, i) => ({ "@type": "ListItem", position: i + 1, url: `${SITE_URL}/prices/${b.key}`, name: b.name })),
-        }}
+        data={webPageLd({
+          type: "CollectionPage",
+          path: `/prices/${category}`,
+          name: categoryTitle(cat.name, brands.length),
+          description: categoryDescription(cat.name, brands),
+          hasBreadcrumb: true,
+          extra: { about: { "@type": "Thing", name: cat.name } },
+          mainEntity: {
+            "@type": "ItemList",
+            name: `${cat.name} brands in India`,
+            numberOfItems: brands.length,
+            itemListOrder: "https://schema.org/ItemListOrderAscending",
+            itemListElement: brands.slice(0, 200).map((b, i) => ({ "@type": "ListItem", position: i + 1, url: `${SITE_URL}/prices/${b.key}`, name: b.name })),
+          },
+        })}
       />
     </div>
   );

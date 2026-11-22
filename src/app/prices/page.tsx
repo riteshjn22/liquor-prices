@@ -2,15 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Faq } from "@/components/Blocks";
+import { JsonLd } from "@/components/JsonLd";
 import { RichText } from "@/components/RichText";
 import { CATEGORIES } from "@/lib/categories";
+import { SITE_URL } from "@/lib/config";
 import { getCategorySummaries, getFaqs, getPageContent } from "@/lib/data";
+import { pageMetadata, webPageLd } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Liquor Prices in India: Whisky, Beer, Wine, Vodka, Rum, Brandy",
-  description: "Explore liquor prices in India by category: whisky, beer, wine, vodka, rum and brandy. Brand-wise price ranges and official state MRPs by bottle size.",
-  alternates: { canonical: "/prices" },
-};
+const TITLE = "Liquor Prices in India: Whisky, Beer, Wine, Vodka, Rum, Brandy";
+const DESCRIPTION = "Explore liquor prices in India by category: whisky, beer, wine, vodka, rum and brandy. Brand-wise price ranges and state-wise prices by bottle size.";
+
+export const metadata: Metadata = pageMetadata({ title: TITLE, description: DESCRIPTION, path: "/prices" });
 
 export default async function PricesPage() {
   const [summaries, about, faqs] = await Promise.all([getCategorySummaries(), getPageContent("prices:about"), getFaqs("prices")]);
@@ -56,6 +58,22 @@ export default async function PricesPage() {
       )}
 
       <Faq items={faqs} />
+
+      <JsonLd
+        data={webPageLd({
+          type: "CollectionPage",
+          path: "/prices",
+          name: TITLE,
+          description: DESCRIPTION,
+          hasBreadcrumb: true,
+          mainEntity: {
+            "@type": "ItemList",
+            name: "Liquor price categories",
+            numberOfItems: CATEGORIES.length,
+            itemListElement: CATEGORIES.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: `${c.name} prices in India`, url: `${SITE_URL}/prices/${c.slug}` })),
+          },
+        })}
+      />
     </div>
   );
 }

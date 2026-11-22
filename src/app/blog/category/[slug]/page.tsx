@@ -7,6 +7,7 @@ import { JsonLd } from "@/components/JsonLd";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { SITE_URL } from "@/lib/config";
 import { getBlogCategories, getPublishedPosts } from "@/lib/data";
+import { BLOG_ID, fullDescription, latestDate, pageMetadata, WEBSITE_ID, webPageLd } from "@/lib/seo";
 
 // Crawlers always get complete HTML; new categories render on first visit, then are cached.
 export const ensureStatic = "navigation";
@@ -32,14 +33,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await load(params);
   if (!data) return {};
   const { category } = data;
-  return {
+  return pageMetadata({
     title: `${category.name}: Blog`,
-    description: category.description || `Articles on ${category.name.toLowerCase()} from the blog: liquor prices, excise rules and updates in India.`,
-    alternates: { canonical: `/blog/category/${category.slug}` },
+    description: describe(category),
+    path: `/blog/category/${category.slug}`,
     // A category without posts is an empty page: keep it out of search until it has some.
-    robots: category.postCount ? undefined : { index: false, follow: true },
-  };
+    noindex: !category.postCount,
+  });
 }
+
+const describe = (c: { name: string; description: string }) =>
+  fullDescription(c.description, `Articles on ${c.name.toLowerCase()} from the blog: liquor prices, excise rules and updates in India.`);
 
 export default function BlogCategoryPage({ params }: Props) {
   return (
@@ -70,14 +74,21 @@ async function CategoryContent({ params }: Pick<Props, "params">) {
       {posts.length === 0 ? <p className="card mt-6 text-muted">No posts in this category yet. Check back soon.</p> : <PostCards posts={posts} categories={categoryMap(categories)} />}
 
       <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "CollectionPage",
-          name: category.name,
-          url: `${SITE_URL}/blog/category/${category.slug}`,
-          ...(category.description ? { description: category.description } : {}),
-          hasPart: posts.slice(0, 20).map((p) => ({ "@type": "BlogPosting", headline: p.title, url: `${SITE_URL}/blog/${p.slug}`, datePublished: p.publishedAt })),
-        }}
+        data={webPageLd({
+          type: "CollectionPage",
+          path: `/blog/category/${category.slug}`,
+          name: `${category.name}: Blog`,
+          description: describe(category),
+          dateModified: latestDate(posts.map((p) => p.updatedAt)),
+          hasBreadcrumb: true,
+          extra: { isPartOf: [{ "@id": WEBSITE_ID }, { "@id": BLOG_ID }], about: { "@type": "Thing", name: category.name } },
+          mainEntity: {
+            "@type": "ItemList",
+            name: category.name,
+            numberOfItems: posts.length,
+            itemListElement: posts.slice(0, 50).map((p, i) => ({ "@type": "ListItem", position: i + 1, url: `${SITE_URL}/blog/${p.slug}`, name: p.title })),
+          },
+        })}
       />
     </div>
   );

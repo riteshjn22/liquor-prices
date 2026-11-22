@@ -293,13 +293,13 @@ export async function getSiteStats(): Promise<SiteStats> {
   return { brandCount, latestFy: fy[0]?.latestFy ?? "", lastSyncedAt: (run?.finishedAt as string | undefined) ?? null };
 }
 
-export type SitemapEntry = { category: string; slug: string; updatedAt: string };
+export type SitemapEntry = { category: string; slug: string; updatedAt: string; image?: string | null };
 
 export async function getSitemapEntries(): Promise<SitemapEntry[]> {
   "use cache";
   cached();
   const db = await getDb();
-  const rows = await db.collection<BrandDoc>(COLLECTIONS.brands).find(ENABLED, { projection: { _id: 0, category: 1, slug: 1, updatedAt: 1 } }).toArray();
+  const rows = await db.collection<BrandDoc>(COLLECTIONS.brands).find(ENABLED, { projection: { _id: 0, category: 1, slug: 1, updatedAt: 1, image: 1 } }).toArray();
   return rows as unknown as SitemapEntry[];
 }
 

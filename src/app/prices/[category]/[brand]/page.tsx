@@ -11,7 +11,8 @@ import { RichText } from "@/components/RichText";
 import { StateWiseTabs, type VariantTable } from "@/components/StateWiseTabs";
 import { formatRange } from "@/lib/brand-match";
 import { getCategory } from "@/lib/categories";
-import { getStateConfig, SITE_URL } from "@/lib/config";
+import { getStateConfig } from "@/lib/config";
+import { absoluteUrl, htmlToText, pageMetadata, webPageLd } from "@/lib/seo";
 import { getAllBrandParams, getBrandChanges, getBrandPage, getFaqs, getRelatedBrands, type BrandPage, type DisplayProduct } from "@/lib/data";
 import { imageKitEnabled, imageKitUrl } from "@/lib/imagekit";
 import { sizeLabel } from "@/lib/normalize";
@@ -146,17 +147,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     brand.seoDescription ||
     `${brand.name} price in India${range ? `: ${range}` : ""}. ${
       stateNames.length ? `Prices by bottle size for ${stateNames.slice(0, 4).join(", ")}.` : "Variants and bottle sizes."
-    } Official MRP where available.`;
-  return {
-    title,
-    description,
-    alternates: { canonical: `/prices/${brand.key}` },
-    openGraph: {
-      title,
-      url: `/prices/${brand.key}`,
-      images: brand.image && imageKitEnabled ? [{ url: imageKitUrl(brand.image, 1200, 630), width: 1200, height: 630 }] : undefined,
-    },
-  };
+    } Check the MRP printed on the bottle.`;
+  // The share image is generated next to this page (opengraph-image.tsx) with the brand name and price range.
+  return pageMetadata({ title, description, path: `/prices/${brand.key}`, ownImageFile: true });
 }
 
 export default function BrandPageRoute({ params }: Props) {
@@ -184,8 +177,12 @@ async function BrandContent({ params }: Pick<Props, "params">) {
   const listedRange = prices.length ? formatRange(Math.min(...prices), Math.max(...prices)) : "";
   const variants = new Set([...sections.flatMap((s) => s.official.map((r) => r.variant)), ...page.statePrices.map((p) => p.variant).filter(Boolean)]);
   const lowerCat = cat.name.toLowerCase();
-
-
+  const url = absoluteUrl(`/prices/${brand.key}`);
+  const imageUrl = brand.image && imageKitEnabled ? imageKitUrl(brand.image, 800, 800) : undefined;
+  const sizes = [...new Set(variantTables.flatMap((t) => t.sizes.map((s) => s.ml)))].sort((a, b) => a - b);
+  const productDescription =
+    htmlToText(brand.description, 300) ||
+    `${brand.name} ${lowerCat} price in India${listedRange ? `: ${listedRange}` : ""}, by state and bottle size.`;
 
   return (
     <article>
@@ -265,17 +262,39 @@ async function BrandContent({ params }: Pick<Props, "params">) {
       )}
 
       <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "Product",
-          name: brand.name,
-          category: cat.name,
-          url: `${SITE_URL}/prices/${brand.key}`,
-          ...(brand.image && imageKitEnabled ? { image: imageKitUrl(brand.image, 800, 800) } : {}),
-          ...(prices.length
-            ? { offers: { "@type": "AggregateOffer", priceCurrency: "INR", lowPrice: Math.min(...prices), highPrice: Math.max(...prices), offerCount: prices.length } }
-            : {}),
-        }}
+        data={webPageLd({
+          type: "ItemPage",
+          path: `/prices/${brand.key}`,
+          name: `${brand.name} Price in India`,
+          description: productDescription,
+          dateModified: brand.updatedAt,
+          image: imageUrl,
+          hasBreadcrumb: true,
+          mainEntity: {
+            "@type": "Product",
+            "@id": `${url}#product`,
+            name: brand.name,
+            brand: { "@type": "Brand", name: brand.name },
+            category: `Alcoholic beverages > ${cat.name}`,
+            description: productDescription,
+            url,
+            ...(imageUrl ? { image: imageUrl } : {}),
+            ...(sizes.length ? { size: sizes.map((ml) => sizeLabel(ml)).join(", ") } : {}),
+            ...(prices.length
+              ? {
+                  offers: {
+                    "@type": "AggregateOffer",
+                    priceCurrency: "INR",
+                    lowPrice: Math.min(...prices),
+                    highPrice: Math.max(...prices),
+                    offerCount: prices.length,
+                    url,
+                    areaServed: sections.map((s) => ({ "@type": "State", name: s.name })),
+                  },
+                }
+              : {}),
+          },
+        })}
       />
     </article>
   );

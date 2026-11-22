@@ -12,6 +12,7 @@ import { SITE_NAME, SITE_URL } from "@/lib/config";
 import { coverUrl } from "@/lib/cover";
 import { getBlogCategories, getFaqs, getPost, getPublishedPosts } from "@/lib/data";
 import { formatDate } from "@/lib/format";
+import { absoluteUrl, BLOG_ID, fullDescription, htmlToText, LANGUAGE, LOGO_URL, ORG_ID, pageMetadata, webPageLd, wordCount } from "@/lib/seo";
 
 // Crawlers always get complete HTML; new posts render on first visit, then are cached.
 export const ensureStatic = "navigation";
@@ -33,15 +34,23 @@ async function load(params: Props["params"]) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const post = await load(params);
   if (!post) return {};
-  const title = post.seoTitle || post.title;
+  const categories = await getBlogCategories();
+  const category = post.category ? categories.find((c) => c.slug === post.category) : undefined;
   const img = coverUrl(post.coverImage, 1200, 630);
-  return {
-    title,
-    description: post.seoDescription || post.excerpt || undefined,
-    alternates: { canonical: `/blog/${post.slug}` },
-    openGraph: { type: "article", title, url: `/blog/${post.slug}`, publishedTime: post.publishedAt, images: img ? [{ url: img, width: 1200, height: 630 }] : undefined },
-  };
+  return pageMetadata({
+    title: post.seoTitle || post.title,
+    description: postDescription(post),
+    path: `/blog/${post.slug}`,
+    type: "article",
+    publishedTime: post.publishedAt,
+    modifiedTime: post.updatedAt,
+    section: category?.name,
+    // Without a cover image the site's generated share image is used.
+    images: img ? [{ url: img, width: 1200, height: 630, alt: post.title }] : undefined,
+  });
 }
+
+const postDescription = (post: { seoDescription?: string; excerpt: string; html: string }) => fullDescription(post.seoDescription || post.excerpt || htmlToText(post.html, 160), "Liquor prices, dry days and excise rules in India, explained on the Trendswe Liquor Info blog.");
 
 export default function BlogPostPage({ params }: Props) {
   return (
@@ -64,6 +73,7 @@ async function PostContent({ params }: Pick<Props, "params">) {
   // Posts from the same category first, then the newest others.
   const more = [...sameCategory, ...recent].filter((p, i, all) => p.slug !== post.slug && all.findIndex((x) => x.slug === p.slug) === i).slice(0, 3);
   const img = coverUrl(post.coverImage, 1200, 630);
+  const url = absoluteUrl(`/blog/${post.slug}`);
 
   return (
     <article className="mx-auto max-w-3xl">
@@ -84,10 +94,16 @@ async function PostContent({ params }: Pick<Props, "params">) {
         <time dateTime={post.publishedAt} className="text-sm text-muted">
           {formatDate(post.publishedAt)}
         </time>
+        {post.updatedAt.slice(0, 10) > post.publishedAt && (
+          <span className="text-sm text-muted">
+            · Updated <time dateTime={post.updatedAt}>{formatDate(post.updatedAt)}</time>
+          </span>
+        )}
+        <span className="text-sm text-muted">· By {SITE_NAME}</span>
       </div>
       {img && (
         // eslint-disable-next-line @next/next/no-img-element -- ImageKit resizes; skip Vercel's optimiser quota
-        <img src={img} alt="" width={1200} height={630} fetchPriority="high" className="mt-5 aspect-video w-full rounded-2xl object-cover" />
+        <img src={img} alt={post.title} width={1200} height={630} fetchPriority="high" className="mt-5 aspect-video w-full rounded-2xl object-cover" />
       )}
       <RichText html={post.html} className="mt-6" />
       <Faq items={faqs} />
@@ -108,18 +124,32 @@ async function PostContent({ params }: Pick<Props, "params">) {
       )}
 
       <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "BlogPosting",
-          headline: post.title,
+        data={webPageLd({
+          path: `/blog/${post.slug}`,
+          name: post.seoTitle || post.title,
+          description: postDescription(post),
           datePublished: post.publishedAt,
           dateModified: post.updatedAt,
-          url: `${SITE_URL}/blog/${post.slug}`,
-          ...(img ? { image: img } : {}),
-          ...(post.excerpt ? { description: post.excerpt } : {}),
-          ...(category ? { articleSection: category.name } : {}),
-          publisher: { "@type": "Organization", name: SITE_NAME },
-        }}
+          image: img ?? undefined,
+          hasBreadcrumb: true,
+          mainEntity: {
+            "@type": "BlogPosting",
+            "@id": `${url}#article`,
+            headline: post.title.slice(0, 110),
+            description: postDescription(post),
+            url,
+            mainEntityOfPage: { "@id": `${url}#webpage` },
+            isPartOf: { "@id": BLOG_ID },
+            datePublished: post.publishedAt,
+            dateModified: post.updatedAt,
+            inLanguage: LANGUAGE,
+            image: img ? [img] : [LOGO_URL],
+            wordCount: wordCount(post.html),
+            ...(category ? { articleSection: category.name } : {}),
+            author: { "@type": "Organization", "@id": ORG_ID, name: SITE_NAME, url: SITE_URL },
+            publisher: { "@id": ORG_ID },
+          },
+        })}
       />
     </article>
   );

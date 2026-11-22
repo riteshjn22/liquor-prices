@@ -26,6 +26,8 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
         data={{
           "@context": "https://schema.org",
           "@type": "BreadcrumbList",
+          // Pages link to this from their WebPage data (webPageLd hasBreadcrumb).
+          "@id": `${SITE_URL}${all[all.length - 1].href}#breadcrumb`,
           itemListElement: all.map((c, i) => ({
             "@type": "ListItem",
             position: i + 1,

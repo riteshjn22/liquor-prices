@@ -237,6 +237,8 @@ Its products are linked to your brands automatically and appear as another offic
 
 ## Notes
 
+- **SEO**: structured data, meta tags, share images, sitemap, RSS and the rest are listed in [SEO.md](SEO.md).
+  After deploying, add `GOOGLE_SITE_VERIFICATION` / `BING_SITE_VERIFICATION` (optional) and submit the sitemap.
 - **Price ranges** come from your Excel and are shown as "approximate". Only the Delhi tables (and any future automatic sources)
   are labelled as official excise MRP; prices you add are labelled "added by our team".
 - **Vercel Hobby** is for personal, non-commercial projects. If the site will earn money (ads, affiliate links), check Vercel's terms and plan for the Pro plan.

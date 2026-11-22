@@ -1,11 +1,22 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BrandCards, CategoryTiles, Faq, SectionTitle } from "@/components/Blocks";
 import { categoryMap, Pill } from "@/components/BlogBlocks";
+import { JsonLd } from "@/components/JsonLd";
+import { CATEGORIES } from "@/lib/categories";
+import { SITE_NAME, SITE_URL } from "@/lib/config";
 import { coverUrl } from "@/lib/cover";
+import { pageMetadata, webPageLd } from "@/lib/seo";
 import { getBlogCategories, getCategorySummaries, getFaqs, getHomeCards, getPopularBrands, getPublishedPosts, type PostSummary } from "@/lib/data";
 import { formatDate } from "@/lib/format";
 import type { BlogCategory, HomeCard } from "@/lib/types";
+
+const HOME_TITLE = `${SITE_NAME} | Liquor Prices, Laws & Dry Day Updates in India`;
+const HOME_DESCRIPTION =
+  "India's liquor information portal: brand-wise prices for whisky, beer, wine, vodka, rum and brandy by state and bottle size, plus dry days, excise rules and the latest updates.";
+
+export const metadata: Metadata = pageMetadata({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: "/", ownImageFile: true });
 
 /** Icons for the "Explore Information" cards, by card id. */
 const ICONS: Record<string, ReactNode> = {
@@ -138,6 +149,20 @@ export default async function HomePage() {
       </section>
 
       <Faq items={faqs} />
+
+      <JsonLd
+        data={webPageLd({
+          path: "/",
+          name: HOME_TITLE,
+          description: HOME_DESCRIPTION,
+          dateModified: posts[0]?.updatedAt,
+          mainEntity: {
+            "@type": "ItemList",
+            name: "Liquor price categories",
+            itemListElement: CATEGORIES.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: `${c.name} prices`, url: `${SITE_URL}/prices/${c.slug}` })),
+          },
+        })}
+      />
     </div>
   );
 }

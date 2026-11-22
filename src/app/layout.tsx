@@ -1,23 +1,60 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Geist } from "next/font/google";
+import { preconnect } from "react-dom";
+import { JsonLd } from "@/components/JsonLd";
 import { CATEGORIES } from "@/lib/categories";
 import { SITE_NAME, SITE_TAGLINE, SITE_URL, STATES } from "@/lib/config";
+import { FEED_PATH, LOCALE, siteGraph } from "@/lib/seo";
 import "./globals.css";
+
+const IMAGEKIT_ORIGIN = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT ? new URL(process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT).origin : null;
+  } catch {
+    return null;
+  }
+})();
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
+const DEFAULT_DESCRIPTION = "Liquor prices in India by brand: whisky, beer, wine, vodka, rum and brandy, with state-wise prices by bottle size, liquor laws and updates.";
+
+// Search console ownership codes (optional): set them in Vercel's environment variables.
+const verification: Metadata["verification"] = {
+  ...(process.env.GOOGLE_SITE_VERIFICATION ? { google: process.env.GOOGLE_SITE_VERIFICATION } : {}),
+  ...(process.env.BING_SITE_VERIFICATION ? { other: { "msvalidate.01": process.env.BING_SITE_VERIFICATION } } : {}),
+};
+
+/** Defaults for every page; each page sets its own title, description, canonical and share tags (lib/seo.ts). */
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: `${SITE_NAME} | ${SITE_TAGLINE}`,
     template: `%s | ${SITE_NAME}`,
   },
-  description: "Liquor prices in India by brand: whisky, beer, wine, vodka, rum and brandy, with official state excise MRPs where available.",
+  description: DEFAULT_DESCRIPTION,
   applicationName: SITE_NAME,
-  openGraph: { type: "website", siteName: SITE_NAME, locale: "en_IN" },
-  twitter: { card: "summary" },
-  formatDetection: { telephone: false },
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  category: "Food & Drink",
+  referrer: "strict-origin-when-cross-origin",
+  // Pages are indexable by default (no tag needed); this only allows large image previews and full snippets.
+  // Keeping index/follow out means 404s and noindex pages never carry a conflicting tag.
+  robots: { googleBot: { "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 } },
+  openGraph: { type: "website", siteName: SITE_NAME, locale: LOCALE, title: `${SITE_NAME} | ${SITE_TAGLINE}`, description: DEFAULT_DESCRIPTION, url: "/" },
+  twitter: { card: "summary_large_image", title: `${SITE_NAME} | ${SITE_TAGLINE}`, description: DEFAULT_DESCRIPTION },
+  alternates: { types: { "application/rss+xml": [{ url: FEED_PATH, title: `${SITE_NAME} blog` }] } },
+  formatDetection: { telephone: false, email: false, address: false },
+  ...(Object.keys(verification).length ? { verification } : {}),
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0d2037",
+  colorScheme: "light",
 };
 
 /** "Trendswe Liquor Info" -> Trendswe <gold>Liquor Info</gold> */
@@ -145,11 +182,19 @@ function Footer() {
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
+  // Brand and blog images come from ImageKit: open the connection early.
+  if (IMAGEKIT_ORIGIN) preconnect(IMAGEKIT_ORIGIN);
   return (
     <html lang="en-IN" className={`${geistSans.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-page text-ink">
+        <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-ink focus:shadow">
+          Skip to content
+        </a>
+        <JsonLd data={siteGraph()} />
         <Header />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-7 sm:px-5">{children}</main>
+        <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-7 sm:px-5">
+          {children}
+        </main>
         <Footer />
       </body>
     </html>
