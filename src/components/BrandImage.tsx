@@ -7,6 +7,7 @@ const TYPE_COLORS: Record<string, string> = {
   gin: "#0f766e",
   wine: "#9f1239",
   champagne: "#a16207",
+  beer: "#ca8a04",
   "beer-light": "#ca8a04",
   "beer-strong": "#a16207",
   "draught-beer": "#854d0e",

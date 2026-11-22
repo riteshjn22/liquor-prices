@@ -1,4 +1,5 @@
-export const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || "Liquor Price Index";
+export const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || "Trendswe Liquor Info";
+export const SITE_TAGLINE = process.env.NEXT_PUBLIC_SITE_TAGLINE || "Liquor Prices & Brand Information in India";
 
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
 

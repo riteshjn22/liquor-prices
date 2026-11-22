@@ -1,29 +1,17 @@
 import type { MetadataRoute } from "next";
-import { getSitemapEntries, getTypes } from "@/lib/data";
-import { SITE_URL, STATES } from "@/lib/config";
+import { CATEGORIES } from "@/lib/categories";
+import { SITE_URL } from "@/lib/config";
+import { getSitemapEntries } from "@/lib/data";
 
-// ~2,600 brand URLs today: well under the 50,000-per-file limit.
-// If you add many states, switch to generateSitemaps() to split it.
+// Only enabled brands are listed. Well under the 50,000-URL limit per sitemap.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: `${SITE_URL}/`, changeFrequency: "daily", priority: 1 },
-    { url: `${SITE_URL}/prices`, changeFrequency: "weekly", priority: 0.6 },
+    { url: `${SITE_URL}/prices`, changeFrequency: "daily", priority: 0.9 },
+    ...CATEGORIES.map((c) => ({ url: `${SITE_URL}/prices/${c.slug}`, changeFrequency: "daily" as const, priority: 0.8 })),
   ];
-
-  for (const s of STATES) {
-    entries.push({ url: `${SITE_URL}/prices/${s.slug}`, changeFrequency: "daily", priority: 0.9 });
-    for (const t of await getTypes(s.slug)) {
-      entries.push({ url: `${SITE_URL}/prices/${s.slug}/${t.slug}`, changeFrequency: "daily", priority: 0.8 });
-    }
-  }
-
   for (const b of await getSitemapEntries()) {
-    entries.push({
-      url: `${SITE_URL}/prices/${b.state}/${b.typeSlug}/${b.slug}`,
-      lastModified: b.updatedAt,
-      changeFrequency: "weekly",
-      priority: 0.7,
-    });
+    entries.push({ url: `${SITE_URL}/prices/${b.category}/${b.slug}`, lastModified: b.updatedAt, changeFrequency: "weekly", priority: 0.7 });
   }
   return entries;
 }

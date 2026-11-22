@@ -1,24 +1,18 @@
 import type { AnyBulkWriteOperation } from "mongodb";
-import { buildBrands } from "./build-brands";
+import { assignBrands } from "./brand-match";
+import { buildProducts } from "./build-products";
 import { COLLECTIONS, ensureIndexes, getDb } from "./mongodb";
 import { SOURCES, type FetchOptions } from "./sources";
-import { applyOverrides } from "./overrides";
-import type { BrandDoc, BrandOverrides, PriceChange, SyncResult } from "./types";
+import type { PriceChange, ProductDoc, SyncResult } from "./types";
 
-type ExistingBrand = Pick<BrandDoc, "key"> & {
-  overrides?: BrandOverrides;
-  sizes?: { key: string; mrp: number; officialMrp?: number }[];
-};
+type ExistingProduct = Pick<ProductDoc, "key"> & { sizes?: { key: string; mrp: number }[] };
 
 /**
- * Pull the latest list for one state, clean it, and upsert it into MongoDB.
- * Safe to run repeatedly. Brands that disappear from the source keep their
- * page (inSource: false) so indexed URLs never 404.
+ * Pull the latest excise list for one state, clean it, and upsert the products.
+ * Then re-match products to your brands. Safe to run repeatedly.
+ * Products that disappear from the source are kept (inSource: false).
  */
-export async function runSync(
-  state: string,
-  opts: { force?: boolean; fetch?: FetchOptions } = {},
-): Promise<SyncResult> {
+export async function runSync(state: string, opts: { force?: boolean; fetch?: FetchOptions } = {}): Promise<SyncResult> {
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
   const db = await getDb();
@@ -26,52 +20,41 @@ export async function runSync(
   const runs = db.collection(COLLECTIONS.syncRuns);
   const fetcher = SOURCES[state];
 
-  const base: SyncResult = { state, status: "failed", rows: 0, brands: 0, inserted: 0, updated: 0, priceChanges: 0, ms: 0 };
+  const base: SyncResult = { state, status: "failed", rows: 0, products: 0, inserted: 0, updated: 0, priceChanges: 0, ms: 0 };
 
   try {
     if (!fetcher) throw new Error(`No source configured for state "${state}"`);
     const { rows, hash } = await fetcher(opts.fetch);
 
-    const lastOk = await runs.findOne(
-      { state, status: { $in: ["updated", "unchanged"] } },
-      { sort: { startedAt: -1 }, projection: { hash: 1 } },
-    );
+    const lastOk = await runs.findOne({ state, status: { $in: ["updated", "unchanged"] } }, { sort: { startedAt: -1 }, projection: { hash: 1 } });
     if (!opts.force && lastOk?.hash === hash) {
       const result: SyncResult = { ...base, status: "unchanged", rows: rows.length, ms: Date.now() - started };
       await runs.insertOne({ ...result, hash, startedAt, finishedAt: new Date().toISOString() });
       return result;
     }
 
-    const brands = buildBrands(rows);
-    const brandsCol = db.collection<BrandDoc>(COLLECTIONS.brands);
-    const existing = await brandsCol
-      .find(
-        { state },
-        { projection: { _id: 0, key: 1, overrides: 1, "sizes.key": 1, "sizes.mrp": 1, "sizes.officialMrp": 1 } },
-      )
-      .toArray() as unknown as ExistingBrand[];
-    const existingMap = new Map(existing.map((b) => [b.key, b]));
+    const products = buildProducts(rows);
+    const col = db.collection<ProductDoc>(COLLECTIONS.products);
+    const existing = (await col
+      .find({ state }, { projection: { _id: 0, key: 1, "sizes.key": 1, "sizes.mrp": 1 } })
+      .toArray()) as unknown as ExistingProduct[];
+    const existingMap = new Map(existing.map((p) => [p.key, p]));
 
     const now = new Date().toISOString();
     const changes: PriceChange[] = [];
-    const ops: AnyBulkWriteOperation<BrandDoc>[] = brands.map((b) => {
-      const old = existingMap.get(b.key);
-      // Re-apply manual Excel edits on top of the fresh official data.
-      const effective = applyOverrides(b, old?.overrides);
+    const ops: AnyBulkWriteOperation<ProductDoc>[] = products.map((p) => {
+      const old = existingMap.get(p.key);
       let changed = false;
       if (old?.sizes) {
-        // Compare official prices only, so a manual override never shows up as a "price change".
-        const oldPrices = new Map(old.sizes.map((s) => [s.key, s.officialMrp ?? s.mrp]));
-        for (const s of b.sizes) {
+        const oldPrices = new Map(old.sizes.map((s) => [s.key, s.mrp]));
+        for (const s of p.sizes) {
           const prev = oldPrices.get(s.key);
           if (prev !== undefined && prev !== s.mrp) {
             changed = true;
             changes.push({
               state,
-              brandKey: b.key,
-              brandName: effective.name,
-              typeSlug: b.typeSlug,
-              brandSlug: b.slug,
+              productKey: p.key,
+              productName: p.name,
               sizeKey: s.key,
               sizeLabel: `${s.label} ${s.packageType}`,
               oldMrp: prev,
@@ -83,30 +66,30 @@ export async function runSync(
       }
       return {
         updateOne: {
-          filter: { key: b.key },
-          update: {
-            // `overrides` and `image` are never in this $set, so manual edits survive every sync.
-            $set: { ...b, ...effective, updatedAt: now, ...(changed ? { priceChangedAt: now } : {}) },
-            $setOnInsert: { createdAt: now, image: null },
-          },
+          filter: { key: p.key },
+          // Brand assignment fields (brandKey, brandOverride, label) are never in this $set,
+          // so admin edits survive every sync.
+          update: { $set: { ...p, updatedAt: now, ...(changed ? { priceChangedAt: now } : {}) }, $setOnInsert: { createdAt: now } },
           upsert: true,
         },
       };
     });
 
-    const write = await brandsCol.bulkWrite(ops, { ordered: false });
-    const seen = brands.map((b) => b.key);
-    await brandsCol.updateMany({ state, key: { $nin: seen }, inSource: true }, { $set: { inSource: false, updatedAt: now } });
+    const write = await col.bulkWrite(ops, { ordered: false });
+    const seen = products.map((p) => p.key);
+    await col.updateMany({ state, key: { $nin: seen }, inSource: true }, { $set: { inSource: false, updatedAt: now } });
     if (changes.length) await db.collection(COLLECTIONS.priceChanges).insertMany(changes);
+    const { matched } = await assignBrands(db);
 
     const result: SyncResult = {
       ...base,
       status: "updated",
       rows: rows.length,
-      brands: brands.length,
+      products: products.length,
       inserted: write.upsertedCount,
       updated: write.modifiedCount,
       priceChanges: changes.length,
+      matched,
       ms: Date.now() - started,
     };
     await runs.insertOne({ ...result, hash, startedAt, finishedAt: new Date().toISOString() });

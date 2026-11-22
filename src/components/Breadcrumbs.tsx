@@ -8,15 +8,15 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
   const all: Crumb[] = [{ name: "Home", href: "/" }, ...items];
   return (
     <>
-      <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
+      <nav aria-label="Breadcrumb" className="text-sm text-muted">
         <ol className="flex flex-wrap items-center gap-1">
           {all.map((c, i) => (
             <li key={c.href} className="flex items-center gap-1">
               {i > 0 && <span aria-hidden>›</span>}
               {i === all.length - 1 ? (
-                <span aria-current="page" className="text-slate-700">{c.name}</span>
+                <span aria-current="page" className="text-ink">{c.name}</span>
               ) : (
-                <Link href={c.href} className="hover:text-amber-700 hover:underline">{c.name}</Link>
+                <Link href={c.href} className="text-link hover:underline">{c.name}</Link>
               )}
             </li>
           ))}

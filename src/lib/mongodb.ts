@@ -30,7 +30,12 @@ export async function getDb(): Promise<Db> {
 }
 
 export const COLLECTIONS = {
+  /** Your brand list: one document (and page) per brand family. */
   brands: "brands",
+  /** Products from state excise lists (Delhi), matched to brands. */
+  products: "products",
+  /** Prices added by hand for other states. */
+  statePrices: "state_prices",
   priceChanges: "price_changes",
   syncRuns: "sync_runs",
   imports: "imports",
@@ -41,15 +46,21 @@ let indexesReady: Promise<void> | null = null;
 export function ensureIndexes(db: Db): Promise<void> {
   if (!indexesReady) {
     indexesReady = (async () => {
-      const brands = db.collection(COLLECTIONS.brands);
-      await brands.createIndexes([
+      await db.collection(COLLECTIONS.brands).createIndexes([
         { key: { key: 1 }, unique: true, name: "key_unique" },
-        { key: { state: 1, typeSlug: 1, refMrp: 1 }, name: "state_type_price" },
-        { key: { state: 1, slug: 1 }, name: "state_slug" },
-        { key: { name: "text", rawNames: "text" }, name: "brand_text" },
+        { key: { category: 1, enabled: 1, name: 1 }, name: "category_enabled_name" },
       ]);
-      await db.collection(COLLECTIONS.priceChanges).createIndex({ state: 1, detectedAt: -1 });
-      await db.collection(COLLECTIONS.priceChanges).createIndex({ brandKey: 1, detectedAt: -1 });
+      await db.collection(COLLECTIONS.products).createIndexes([
+        { key: { key: 1 }, unique: true, name: "key_unique" },
+        { key: { brandKey: 1 }, name: "brand" },
+        { key: { state: 1, typeSlug: 1 }, name: "state_type" },
+      ]);
+      await db.collection(COLLECTIONS.statePrices).createIndexes([
+        { key: { id: 1 }, unique: true, name: "id_unique" },
+        { key: { brandKey: 1, state: 1 }, name: "brand_state" },
+      ]);
+      await db.collection(COLLECTIONS.priceChanges).createIndex({ detectedAt: -1 });
+      await db.collection(COLLECTIONS.priceChanges).createIndex({ productKey: 1, detectedAt: -1 });
       await db.collection(COLLECTIONS.syncRuns).createIndex({ state: 1, startedAt: -1 });
     })().catch((err) => {
       indexesReady = null;

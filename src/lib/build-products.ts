@@ -1,7 +1,8 @@
-import type { BrandDoc, PricePoint, PriceRow, SizePrice } from "./types";
+import type { PricePoint, PriceRow, ProductDoc, SizePrice } from "./types";
 import { slugify } from "./normalize";
 
-type BrandData = Omit<BrandDoc, "createdAt" | "updatedAt" | "image" | "priceChangedAt" | "overrides" | "hidden" | "officialName">;
+/** Official product data from the excise list. Brand assignment fields are added later and never overwritten here. */
+export type ProductData = Omit<ProductDoc, "createdAt" | "updatedAt" | "priceChangedAt" | "brandKey" | "autoBrandKey" | "brandOverride" | "label">;
 
 function mostCommon(values: string[]): string {
   const counts = new Map<string, number>();
@@ -51,8 +52,8 @@ function pickRefSize(sizes: SizePrice[]): SizePrice {
   return pool[0];
 }
 
-/** Group cleaned rows into one document per state + liquor type + brand. */
-export function buildBrands(rows: PriceRow[]): BrandData[] {
+/** Group cleaned rows into one product per state + excise type + product name. */
+export function buildProducts(rows: PriceRow[]): ProductData[] {
   const latestFy = rows.reduce((max, r) => (r.fy > max ? r.fy : max), "");
   const groups = new Map<string, PriceRow[]>();
   for (const r of rows) {
@@ -62,7 +63,7 @@ export function buildBrands(rows: PriceRow[]): BrandData[] {
     else groups.set(key, [r]);
   }
 
-  const brands: BrandData[] = [];
+  const brands: ProductData[] = [];
   for (const [key, brandRows] of groups) {
     const bySize = new Map<string, PriceRow[]>();
     for (const r of brandRows) {

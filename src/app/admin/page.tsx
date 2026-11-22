@@ -1,23 +1,22 @@
 import type { Metadata } from "next";
 import { AdminPanel } from "@/components/AdminPanel";
-import { STATES } from "@/lib/config";
+import { CATEGORIES } from "@/lib/categories";
 
 export const metadata: Metadata = {
-  title: "Admin: Excel import / export",
+  title: "Admin",
   robots: { index: false, follow: false },
 };
 
 // Protected by HTTP Basic auth in src/proxy.ts (ADMIN_USER / ADMIN_PASSWORD).
 export default function AdminPage() {
   return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="text-3xl font-bold text-slate-900">Edit data with Excel</h1>
-      <p className="mt-2 text-slate-600">
-        Download the price list, change names, descriptions, SEO text, images or prices in Excel, then upload it here.
-        Your edits are kept when the daily sync brings in new official prices.
+    <div className="mx-auto max-w-5xl">
+      <h1 className="text-3xl font-extrabold text-navy">Admin</h1>
+      <p className="mt-2 text-muted">
+        Switch brands on or off, and manage brands and state prices with Excel. Delhi prices update automatically every day.
       </p>
       <div className="mt-6">
-        <AdminPanel states={STATES.map((s) => ({ slug: s.slug, name: s.name }))} />
+        <AdminPanel categories={CATEGORIES.map((c) => ({ slug: c.slug, name: c.name }))} />
       </div>
     </div>
   );

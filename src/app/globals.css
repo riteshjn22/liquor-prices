@@ -1,34 +1,73 @@
 @import "tailwindcss";
 
+/* Palette inspired by the Trendswe reference design: deep navy, gold accent, soft grey cards. */
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-navy: #0d2037;
+  --color-navy-2: #142b48;
+  --color-gold: #f2bd16;
+  --color-ink: #121820;
+  --color-muted: #596474;
+  --color-line: #e0e4e9;
+  --color-tile: #f2f3f5;
+  --color-link: #1756bd;
+  --color-page: #f7f8fa;
 }
 
 body {
   font-family: var(--font-sans);
 }
 
-/* Shared look for data tables */
+.bg-navy-gradient {
+  background: linear-gradient(110deg, var(--color-navy), var(--color-navy-2));
+}
+
+.card {
+  @apply rounded-2xl border border-line bg-white p-5 shadow-[0_2px_5px_rgba(13,32,55,0.04)];
+}
+.card-hover {
+  @apply transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_6px_15px_rgba(13,32,55,0.08)];
+}
+
+.note {
+  @apply rounded-xl border border-[#f0df9e] bg-[#fff8df] px-4 py-3 text-sm text-[#554719];
+}
+
+/* Data tables */
 .price-table {
   @apply w-full border-collapse text-sm;
 }
 .price-table th {
-  @apply border-b border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-700;
+  @apply border-b border-line bg-tile px-3 py-2 text-left font-semibold text-ink;
 }
 .price-table td {
-  @apply border-b border-slate-100 px-3 py-2 align-top;
+  @apply border-b border-line/70 px-3 py-2 align-top;
+}
+.price-table tbody tr:last-child td {
+  @apply border-b-0;
 }
 .price-table tbody tr:hover {
-  @apply bg-amber-50/60;
+  @apply bg-[#fffbeb];
 }
 
-.card {
-  @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm;
+/* FAQ accordion with +/− marker */
+.faq-item {
+  @apply my-2.5 rounded-xl border border-line bg-white px-4 py-3.5;
+}
+.faq-item summary {
+  @apply flex cursor-pointer list-none justify-between gap-3 font-bold text-ink;
+}
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item summary::after {
+  content: "+";
+  @apply text-[22px] leading-none text-link;
+}
+.faq-item[open] summary::after {
+  content: "−";
 }
 
 .prose-lite p {
-  @apply mt-3 leading-relaxed text-slate-700;
-}
-.prose-lite h2 {
-  @apply mt-8 text-xl font-bold text-slate-900;
+  @apply mt-3 leading-relaxed text-muted;
 }

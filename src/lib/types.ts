@@ -58,6 +58,7 @@ export type PricePoint = {
   mrp: number;
 };
 
+
 export type SizePrice = {
   key: string; // "750-ml-glass-bottle"
   ml: number;
@@ -76,30 +77,19 @@ export type SizePrice = {
   vat: number;
   isCurrent: boolean; // price is from the latest financial year in the feed
   history: PricePoint[]; // oldest first, repeated prices collapsed
-  /** Price from the excise list. `mrp` above is what the site shows (override or official). */
-  officialMrp?: number;
-  overridden?: boolean;
 };
 
-/** Manual edits made through the Excel upload. The daily sync never overwrites these. */
-export type BrandOverrides = {
-  name?: string;
-  description?: string;
-  seoTitle?: string;
-  seoDescription?: string;
-  hidden?: boolean;
-  /** sizeKey -> MRP shown instead of the official one */
-  prices?: Record<string, number>;
-};
-
-export type BrandDoc = {
-  key: string; // "delhi/whisky/old-monk"
+/**
+ * One product from a state excise list (e.g. "Old Monk Matured XXX Select Rum VOV").
+ * Products are not pages; they are shown inside their brand's page.
+ */
+export type ProductDoc = {
+  key: string; // "delhi/rum/old-monk-matured-xxx-select-rum-vov"
   state: string;
-  typeSlug: string;
+  typeSlug: string; // excise type, e.g. "beer-strong"
   typeName: string;
-  slug: string; // never changes, even if the display name is overridden (keeps URLs stable)
-  name: string; // effective display name
-  officialName?: string;
+  slug: string;
+  name: string;
   rawNames: string[];
   kind: string;
   category: string;
@@ -108,57 +98,79 @@ export type BrandDoc = {
   sizes: SizePrice[];
   minMrp: number;
   maxMrp: number;
-  /** MRP of the "headline" size (750 ml if sold, else nearest common bottle). */
   refMrp: number;
   refSize: string;
   refKey?: string;
   latestFy: string;
   isCurrent: boolean;
   inSource: boolean;
-  hidden?: boolean;
-  overrides?: BrandOverrides;
-  /** Optional ImageKit path override. Never overwritten by sync. */
-  image?: string | null;
   createdAt: string;
   updatedAt: string;
   priceChangedAt?: string | null;
+  // ---- set by brand matching / admin (never overwritten by sync) ----
+  /** Brand this product is shown under (override if set, else automatic match). */
+  brandKey?: string | null;
+  autoBrandKey?: string | null;
+  /** Admin override: a brand key, or "none" to keep the product off the site. */
+  brandOverride?: string | null;
+  /** Admin override for the variant name shown on the brand page. */
+  label?: string | null;
 };
 
-export type BrandSummary = Pick<
-  BrandDoc,
-  | "key"
-  | "state"
-  | "typeSlug"
-  | "typeName"
-  | "slug"
-  | "name"
-  | "kind"
-  | "minMrp"
-  | "maxMrp"
-  | "refMrp"
-  | "refSize"
-  | "latestFy"
-  | "isCurrent"
-  | "image"
-> & { sizeLabels: string[] };
+/** A brand family from your brand list, e.g. "Old Monk". One page each: /prices/<category>/<slug>. */
+export type BrandDoc = {
+  key: string; // "rum/old-monk"
+  category: string; // "rum"
+  slug: string; // never changes once created (keeps URLs stable)
+  name: string;
+  enabled: boolean;
+  /** Approximate India price range as typed in Excel, e.g. "?500 – ?800". */
+  priceText: string;
+  priceMin: number | null;
+  priceMax: number | null;
+  priceNote: string;
+  description?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  image?: string | null;
+  /** Extra names used to find this brand's products in excise lists, e.g. ["mc-dowells"]. */
+  matchWords: string[];
+  createdAt: string;
+  updatedAt: string;
+};
 
-export type TypeSummary = {
-  state: string;
+/** A price added by hand (through Excel) for a state without an automatic source. */
+export type StatePrice = {
+  id: string;
+  brandKey: string;
+  state: string; // state slug, e.g. "haryana"
+  variant: string;
+  size: string; // as typed, e.g. "750 ml"
+  ml: number | null;
+  mrp: number;
+  note: string;
+  updatedAt: string;
+};
+
+export type BrandSummary = Pick<BrandDoc, "key" | "category" | "slug" | "name" | "priceText" | "priceMin" | "priceMax" | "priceNote" | "image"> & {
+  /** Lowest / highest official MRP among this brand's listed products, if any. */
+  officialMin: number | null;
+  officialMax: number | null;
+  productCount: number;
+  stateCount: number;
+};
+
+export type CategorySummary = {
   slug: string;
   name: string;
+  emoji: string;
   brandCount: number;
-  minMrp: number; // smallest pack of any brand
-  maxMrp: number; // largest pack (can be a 50 L keg)
-  minRef: number; // cheapest headline bottle (usually 750 ml)
-  maxRef: number; // priciest headline bottle
 };
 
 export type PriceChange = {
   state: string;
-  brandKey: string;
-  brandName: string;
-  typeSlug: string;
-  brandSlug: string;
+  productKey: string;
+  productName: string;
   sizeKey: string;
   sizeLabel: string;
   oldMrp: number;
@@ -166,14 +178,18 @@ export type PriceChange = {
   detectedAt: string;
 };
 
+/** A price change resolved to the brand page it appears on. */
+export type BrandPriceChange = PriceChange & { brandKey: string; brandName: string; variant: string };
+
 export type SyncResult = {
   state: string;
   status: "updated" | "unchanged" | "failed";
   rows: number;
-  brands: number;
+  products: number;
   inserted: number;
   updated: number;
   priceChanges: number;
+  matched?: number;
   ms: number;
   error?: string;
 };

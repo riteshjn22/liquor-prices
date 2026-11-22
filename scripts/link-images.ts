@@ -2,9 +2,8 @@
  * Link brand photos uploaded to ImageKit to their brand pages.
  *
  * 1. In ImageKit, upload images into folders named after the URL:
- *      /brands/<state>/<type>/<brand-slug>.jpg   (png/webp also fine)
- *    e.g. /brands/delhi/whisky/royal-stag-barrel-select-whisky.jpg
- *    (the brand slug is the last part of the brand page URL)
+ *      /brands/<category>/<brand-slug>.jpg   (png/webp also fine)
+ *    e.g. /brands/rum/old-monk.jpg  for the page /prices/rum/old-monk
  * 2. Run:  npm run images:link
  *
  * Needs IMAGEKIT_PRIVATE_KEY (ImageKit > Developer options) in .env.local.
@@ -46,12 +45,12 @@ async function main() {
   const linkedPaths: string[] = [];
 
   for (const f of files) {
-    const m = f.filePath.match(/^\/brands\/([^/]+)\/([^/]+)\/([^/]+)\.[a-z0-9]+$/i);
+    const m = f.filePath.match(/^\/brands\/([^/]+)\/([^/]+)\.[a-z0-9]+$/i);
     if (!m) {
       unmatched.push(f.filePath);
       continue;
     }
-    const key = `${m[1]}/${m[2]}/${m[3].toLowerCase()}`;
+    const key = `${m[1].toLowerCase()}/${m[2].toLowerCase()}`;
     const res = await brands.updateOne({ key }, { $set: { image: f.filePath } });
     if (res.matchedCount) {
       linked++;

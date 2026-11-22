@@ -1,21 +1,32 @@
 import { revalidateTag } from "next/cache";
 import type { AnyBulkWriteOperation } from "mongodb";
 import { adminChallenge, isAdminRequest } from "@/lib/admin-auth";
+import { assignBrands } from "@/lib/brand-match";
 import { PRICES_TAG } from "@/lib/config";
-import { planImport } from "@/lib/excel";
-import { COLLECTIONS, getDb } from "@/lib/mongodb";
-import { applyOverrides } from "@/lib/overrides";
-import type { BrandDoc } from "@/lib/types";
+import { planImport, type ImportContext } from "@/lib/excel";
+import { COLLECTIONS, ensureIndexes, getDb } from "@/lib/mongodb";
+import type { BrandDoc, ProductDoc, StatePrice } from "@/lib/types";
 
 export const maxDuration = 60;
 
-// Vercel rejects request bodies over 4.5 MB; a full export is well under that.
+// Vercel rejects request bodies over 4.5 MB.
 const MAX_BYTES = 4 * 1024 * 1024;
 
+/** Split a partial document into $set (values) and $unset (cleared fields). */
+function setUnset<T extends object>(set: Partial<T>) {
+  const $set: Record<string, unknown> = {};
+  const $unset: Record<string, ""> = {};
+  for (const [k, v] of Object.entries(set)) {
+    if (v === undefined) $unset[k] = "";
+    else $set[k] = v;
+  }
+  return { $set, $unset };
+}
+
 /**
- * Upload an edited Excel file.
+ * Upload an edited Excel file (or a plain brand list).
  *   mode=preview -> list what would change (nothing is saved)
- *   mode=apply   -> save the changes and refresh the site
+ *   mode=apply   -> save, re-match Delhi products to brands, refresh the site
  */
 export async function POST(request: Request) {
   if (!isAdminRequest(request.headers.get("authorization"))) return adminChallenge();
@@ -28,24 +39,28 @@ export async function POST(request: Request) {
   if (file.size > MAX_BYTES) return Response.json({ error: "File is larger than 4 MB. Delete rows you did not change and try again." }, { status: 413 });
 
   const db = await getDb();
-  const brands = db.collection<BrandDoc>(COLLECTIONS.brands);
-  const existing = (await brands
-    .find({}, { projection: { _id: 0, key: 1, name: 1, officialName: 1, image: 1, overrides: 1, "sizes.key": 1, "sizes.label": 1, "sizes.packageType": 1 } })
-    .toArray()) as unknown as Parameters<typeof planImport>[1];
+  await ensureIndexes(db);
+  const [brands, statePrices, products] = await Promise.all([
+    db.collection<BrandDoc>(COLLECTIONS.brands).find({}, { projection: { _id: 0 } }).toArray(),
+    db.collection<StatePrice>(COLLECTIONS.statePrices).find({}, { projection: { _id: 0 } }).toArray(),
+    db.collection<ProductDoc>(COLLECTIONS.products).find({}, { projection: { _id: 0, key: 1, name: 1, brandOverride: 1, label: 1 } }).toArray(),
+  ]);
+  const ctx: ImportContext = { brands: brands as BrandDoc[], statePrices: statePrices as StatePrice[], products: products as unknown as ImportContext["products"] };
 
   let plan;
   try {
-    plan = await planImport(await file.arrayBuffer(), existing);
+    plan = await planImport(await file.arrayBuffer(), ctx);
   } catch (err) {
     return Response.json({ error: `Could not read the file as Excel: ${(err as Error).message}` }, { status: 400 });
   }
 
+  const writes = plan.brandWrites.length + plan.priceCreates.length + plan.priceUpdates.length + plan.priceDeletes.length + plan.productWrites.length;
   const summary = {
     mode,
     fileName: file.name,
-    brandRows: plan.brandRows,
-    priceRows: plan.priceRows,
-    brandsChanged: plan.updates.size,
+    format: plan.format,
+    rows: plan.rows,
+    newBrands: plan.brandWrites.filter((w) => w.isNew).length,
     totalChanges: plan.changes.length,
     changes: plan.changes.slice(0, 500),
     errors: plan.errors.slice(0, 200),
@@ -57,35 +72,40 @@ export async function POST(request: Request) {
   if (mode === "apply" && plan.errors.length) {
     return Response.json({ ...summary, error: "Nothing was saved. Fix the errors in Excel and upload again." }, { status: 422 });
   }
-  if (mode === "preview" || plan.updates.size === 0) return Response.json(summary);
+  if (mode === "preview" || writes === 0) return Response.json(summary);
 
-  // Recompute the effective name/prices from each brand's official data + new overrides.
-  const keys = [...plan.updates.keys()];
-  const docs = (await brands
-    .find({ key: { $in: keys } }, { projection: { _id: 0, key: 1, name: 1, officialName: 1, sizes: 1, refSize: 1, refKey: 1, refMrp: 1 } })
-    .toArray()) as unknown as BrandDoc[];
   const now = new Date().toISOString();
-  const ops: AnyBulkWriteOperation<BrandDoc>[] = docs.map((doc) => {
-    const { overrides, image } = plan.updates.get(doc.key)!;
-    const effective = applyOverrides(doc, overrides);
-    return {
-      updateOne: {
-        filter: { key: doc.key },
-        update: overrides
-          ? { $set: { ...effective, overrides, image, editedAt: now } }
-          : { $set: { ...effective, image, editedAt: now }, $unset: { overrides: "" } },
-      },
-    };
-  });
-  await brands.bulkWrite(ops, { ordered: false });
-  await db.collection(COLLECTIONS.imports).insertOne({
-    at: now,
-    fileName: file.name,
-    brandsChanged: plan.updates.size,
-    changes: plan.changes.length,
-  });
+  if (plan.brandWrites.length) {
+    const ops: AnyBulkWriteOperation<BrandDoc>[] = plan.brandWrites.map((w) => {
+      const { $set, $unset } = setUnset<BrandDoc>(w.set);
+      const { createdAt, ...rest } = $set;
+      return {
+        updateOne: {
+          filter: { key: w.key },
+          update: {
+            $set: { ...rest, updatedAt: now },
+            ...(w.isNew ? { $setOnInsert: { createdAt: (createdAt as string) ?? now } } : {}),
+            ...(Object.keys($unset).length ? { $unset } : {}),
+          },
+          upsert: w.isNew,
+        },
+      };
+    });
+    await db.collection<BrandDoc>(COLLECTIONS.brands).bulkWrite(ops, { ordered: false });
+  }
+  const prices = db.collection<StatePrice>(COLLECTIONS.statePrices);
+  if (plan.priceCreates.length) await prices.insertMany(plan.priceCreates);
+  if (plan.priceUpdates.length) await prices.bulkWrite(plan.priceUpdates.map((u) => ({ updateOne: { filter: { id: u.id }, update: { $set: u.set } } })), { ordered: false });
+  if (plan.priceDeletes.length) await prices.deleteMany({ id: { $in: plan.priceDeletes } });
+  if (plan.productWrites.length) {
+    await db
+      .collection<ProductDoc>(COLLECTIONS.products)
+      .bulkWrite(plan.productWrites.map((w) => ({ updateOne: { filter: { key: w.key }, update: { $set: w.set } } })), { ordered: false });
+  }
+  // New brands, renamed brands, match words or manual assignments can all change which products belong where.
+  const match = await assignBrands(db);
+  await db.collection(COLLECTIONS.imports).insertOne({ at: now, fileName: file.name, format: plan.format, changes: plan.changes.length });
 
-  // Expire cached pages now so the edits show on the next visit.
   revalidateTag(PRICES_TAG, { expire: 0 });
-  return Response.json({ ...summary, applied: true });
+  return Response.json({ ...summary, applied: true, productsMatched: match.matched });
 }
