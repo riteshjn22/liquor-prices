@@ -7,6 +7,7 @@ import { BrandImage } from "@/components/BrandImage";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { StateWiseTabs, type VariantTable } from "@/components/StateWiseTabs";
 import { formatRange } from "@/lib/brand-match";
 import { getCategory } from "@/lib/categories";
 import { getStateConfig, SITE_URL } from "@/lib/config";
@@ -57,95 +58,58 @@ function officialRows(products: DisplayProduct[]): OfficialRow[] {
     .sort((a, b) => a.variant.localeCompare(b.variant) || a.ml - b.ml || a.mrp - b.mrp);
 }
 
-/** State × size summary: one row per state, one column per common bottle size. */
-type Matrix = { sizes: { ml: number; label: string }[]; rows: { slug: string; name: string; official: boolean; cells: (string | null)[] }[]; truncated: boolean; multiVariant: boolean };
-
+/** One state × size table per variant (single prices, no ranges), shown as tabs. */
 const MAX_SIZE_COLUMNS = 5;
+const STANDARD_ML = [750, 375, 180, 1000, 650, 500, 330];
 
-function buildMatrix(sections: StateSection[]): Matrix {
-  const perState = sections.map((s) => {
-    const bySize = new Map<number, number[]>();
-    const add = (ml: number | null | undefined, mrp: number) => {
-      if (!ml) return;
-      bySize.set(ml, [...(bySize.get(ml) ?? []), mrp]);
-    };
-    for (const r of s.official) add(r.ml, r.mrp);
-    for (const m of s.manual) add(m.ml, m.mrp);
-    return { s, bySize };
-  });
-  // Pick the sizes listed in the most states, then show them small to large.
-  // Miniatures (60/90 ml) are left out when at least 3 regular sizes exist, so 180/375/750 fit on a phone.
-  const stateCount = new Map<number, number>();
-  for (const { bySize } of perState) for (const ml of bySize.keys()) stateCount.set(ml, (stateCount.get(ml) ?? 0) + 1);
-  const all = [...stateCount.keys()];
-  const regular = all.filter((ml) => ml >= 180);
-  const pool = regular.length >= 3 ? regular : all;
-  const STANDARD = [750, 375, 180, 1000, 650, 500, 330];
-  const rank = (ml: number) => (STANDARD.includes(ml) ? STANDARD.indexOf(ml) : STANDARD.length + ml);
-  const chosen = [...pool].sort((a, b) => stateCount.get(b)! - stateCount.get(a)! || rank(a) - rank(b)).slice(0, MAX_SIZE_COLUMNS).sort((a, b) => a - b);
-  const multiVariant = perState.some(({ bySize }) => chosen.some((ml) => new Set(bySize.get(ml) ?? []).size > 1));
-  return {
-    sizes: chosen.map((ml) => ({ ml, label: sizeLabel(ml) })),
-    rows: perState
-      .filter(({ bySize }) => chosen.some((ml) => bySize.has(ml)))
-      .map(({ s, bySize }) => ({
-        slug: s.slug,
-        name: s.name,
-        official: s.official.length > 0,
-        cells: chosen.map((ml) => {
-          const p = bySize.get(ml);
-          return p ? formatRange(Math.min(...p), Math.max(...p)) : null;
-        }),
-      })),
-    truncated: all.length > chosen.length,
-    multiVariant,
+function buildVariantTables(sections: StateSection[], brandName: string): VariantTable[] {
+  // variant -> state -> ml -> prices
+  const byVariant = new Map<string, { label: string; states: Map<string, Map<number, number[]>>; official: Set<string> }>();
+  const add = (variant: string, state: string, ml: number | null | undefined, mrp: number, isOfficial: boolean) => {
+    if (!ml) return;
+    const label = variant.trim() || brandName;
+    const k = label.toLowerCase();
+    const v = byVariant.get(k) ?? { label, states: new Map(), official: new Set<string>() };
+    if (isOfficial) v.official.add(state);
+    const sizes = v.states.get(state) ?? new Map<number, number[]>();
+    sizes.set(ml, [...(sizes.get(ml) ?? []), mrp]);
+    v.states.set(state, sizes);
+    byVariant.set(k, v);
   };
-}
+  for (const s of sections) {
+    for (const r of s.official) add(r.variant, s.slug, r.ml, r.mrp, true);
+    for (const m of s.manual) add(m.variant, s.slug, m.ml, m.mrp, false);
+  }
 
-function StateMatrix({ brandName, m }: { brandName: string; m: Matrix }) {
-  return (
-    <section className="mt-8">
-      <h2 className="text-2xl font-bold">{brandName} Price State-wise</h2>
-      <div className="mt-3 overflow-x-auto rounded-2xl border border-line bg-white">
-        <table className="price-table [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-3 sm:[&_th]:px-3">
-          <thead>
-            <tr>
-              <th className="sticky left-0 bg-tile">State</th>
-              {m.sizes.map((s) => (
-                <th key={s.ml} className="whitespace-nowrap text-right">
-                  {s.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {m.rows.map((r) => (
-              <tr key={r.slug}>
-                <td className="sticky left-0 bg-white">
-                  <a href={`#state-${r.slug}`} className="font-semibold text-link hover:underline">
-                    {r.name}
-                  </a>
-                  {r.official && (
-                    <span className="mt-0.5 block w-fit rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-semibold text-green-700 sm:ml-1.5 sm:mt-0 sm:inline">Official</span>
-                  )}
-                </td>
-                {r.cells.map((c, i) => (
-                  <td key={m.sizes[i].ml} className="whitespace-nowrap text-right font-bold">
-                    {c ?? <span className="font-normal text-slate-300">—</span>}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-2 text-xs text-muted">
-        {m.multiVariant && "Where several variants share a size, the range covers all of them. "}
-        {m.truncated && "Showing the most common sizes. "}
-        Tap a state for every variant and size.
-      </p>
-    </section>
-  );
+  const tables: (VariantTable & { score: number })[] = [];
+  for (const { label, states, official } of byVariant.values()) {
+    // Pick the sizes listed in the most states; leave out 60/90 ml when 3+ regular sizes exist.
+    const stateCount = new Map<number, number>();
+    for (const sizes of states.values()) for (const ml of sizes.keys()) stateCount.set(ml, (stateCount.get(ml) ?? 0) + 1);
+    const all = [...stateCount.keys()];
+    const regular = all.filter((ml) => ml >= 180);
+    const pool = regular.length >= 3 ? regular : all;
+    const rank = (ml: number) => (STANDARD_ML.includes(ml) ? STANDARD_ML.indexOf(ml) : STANDARD_ML.length + ml);
+    const chosen = [...pool].sort((a, b) => stateCount.get(b)! - stateCount.get(a)! || rank(a) - rank(b)).slice(0, MAX_SIZE_COLUMNS).sort((a, b) => a - b);
+    const rows = sections
+      .filter((s) => states.get(s.slug) && chosen.some((ml) => states.get(s.slug)!.has(ml)))
+      .map((s) => {
+        const sizes = states.get(s.slug)!;
+        return {
+          slug: s.slug,
+          name: s.name,
+          official: official.has(s.slug),
+          // One price per cell: if glass and PET differ, the lower one is shown.
+          cells: chosen.map((ml) => (sizes.has(ml) ? Math.min(...sizes.get(ml)!) : null)),
+        };
+      });
+    if (!rows.length) continue;
+    tables.push({ variant: label, sizes: chosen.map((ml) => ({ ml, label: sizeLabel(ml) })), rows, truncated: all.length > chosen.length, score: states.size * 10 + chosen.length });
+  }
+  // Most widely listed variant first (more states, then more sizes), then A-Z.
+  return tables
+    .sort((a, b) => b.score - a.score || a.variant.localeCompare(b.variant))
+    .map((t) => ({ variant: t.variant, sizes: t.sizes, rows: t.rows, truncated: t.truncated }));
 }
 
 type StateSection = { slug: string; name: string; official: OfficialRow[]; manual: StatePrice[]; source?: { name: string; url: string } };
@@ -277,7 +241,7 @@ async function BrandContent({ params }: Pick<Props, "params">) {
     getSiteStats(),
   ]);
 
-  const matrix = buildMatrix(sections);
+  const variantTables = buildVariantTables(sections, brand.name);
   const prices = allPrices(sections);
   const listedRange = prices.length ? formatRange(Math.min(...prices), Math.max(...prices)) : "";
   const variants = new Set([...sections.flatMap((s) => s.official.map((r) => r.variant)), ...page.statePrices.map((p) => p.variant).filter(Boolean)]);
@@ -326,12 +290,6 @@ async function BrandContent({ params }: Pick<Props, "params">) {
               <div className="text-2xl font-extrabold text-navy">{brand.priceText || "Pending"}</div>
               {brand.priceNote && <div className="text-xs text-muted">{brand.priceNote}</div>}
             </div>
-            {listedRange && (
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted">Listed state prices</div>
-                <div className="text-2xl font-extrabold text-ink">{listedRange}</div>
-              </div>
-            )}
           </div>
           <ul className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
             <li>
@@ -362,7 +320,7 @@ async function BrandContent({ params }: Pick<Props, "params">) {
         </section>
       )}
 
-      {matrix.rows.length > 0 && <StateMatrix brandName={brand.name} m={matrix} />}
+      {variantTables.length > 0 && <StateWiseTabs brandName={brand.name} tables={variantTables} />}
 
       <section className="mt-8">
         <h2 className="text-2xl font-bold">{brand.name} Price List by State</h2>
