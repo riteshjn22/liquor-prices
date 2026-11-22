@@ -59,8 +59,6 @@ function officialRows(products: DisplayProduct[]): OfficialRow[] {
 }
 
 /** One state × size table per variant (single prices, no ranges), shown as tabs. */
-const MAX_SIZE_COLUMNS = 5;
-const STANDARD_ML = [750, 375, 180, 1000, 650, 500, 330];
 
 function buildVariantTables(sections: StateSection[], brandName: string): VariantTable[] {
   // variant -> state -> ml -> prices
@@ -83,14 +81,8 @@ function buildVariantTables(sections: StateSection[], brandName: string): Varian
 
   const tables: (VariantTable & { score: number })[] = [];
   for (const { label, states, official } of byVariant.values()) {
-    // Pick the sizes listed in the most states; leave out 60/90 ml when 3+ regular sizes exist.
-    const stateCount = new Map<number, number>();
-    for (const sizes of states.values()) for (const ml of sizes.keys()) stateCount.set(ml, (stateCount.get(ml) ?? 0) + 1);
-    const all = [...stateCount.keys()];
-    const regular = all.filter((ml) => ml >= 180);
-    const pool = regular.length >= 3 ? regular : all;
-    const rank = (ml: number) => (STANDARD_ML.includes(ml) ? STANDARD_ML.indexOf(ml) : STANDARD_ML.length + ml);
-    const chosen = [...pool].sort((a, b) => stateCount.get(b)! - stateCount.get(a)! || rank(a) - rank(b)).slice(0, MAX_SIZE_COLUMNS).sort((a, b) => a - b);
+    // Every size this variant is sold in, small to large (this table is the only price list on the page).
+    const chosen = [...new Set([...states.values()].flatMap((sizes) => [...sizes.keys()]))].sort((a, b) => a - b);
     const rows = sections
       .filter((s) => states.get(s.slug) && chosen.some((ml) => states.get(s.slug)!.has(ml)))
       .map((s) => {
@@ -104,12 +96,12 @@ function buildVariantTables(sections: StateSection[], brandName: string): Varian
         };
       });
     if (!rows.length) continue;
-    tables.push({ variant: label, sizes: chosen.map((ml) => ({ ml, label: sizeLabel(ml) })), rows, truncated: all.length > chosen.length, score: states.size * 10 + chosen.length });
+    tables.push({ variant: label, sizes: chosen.map((ml) => ({ ml, label: sizeLabel(ml) })), rows, score: states.size * 10 + chosen.length });
   }
   // Most widely listed variant first (more states, then more sizes), then A-Z.
   return tables
     .sort((a, b) => b.score - a.score || a.variant.localeCompare(b.variant))
-    .map((t) => ({ variant: t.variant, sizes: t.sizes, rows: t.rows, truncated: t.truncated }));
+    .map((t) => ({ variant: t.variant, sizes: t.sizes, rows: t.rows }));
 }
 
 type StateSection = { slug: string; name: string; official: OfficialRow[]; manual: StatePrice[]; source?: { name: string; url: string } };
@@ -172,60 +164,6 @@ export default function BrandPageRoute({ params }: Props) {
     <Suspense fallback={<PageSkeleton />}>
       <BrandContent params={params} />
     </Suspense>
-  );
-}
-
-function OfficialTable({ s }: { s: StateSection }) {
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-line bg-white">
-      <table className="price-table">
-        <thead>
-          <tr>
-            <th>Variant</th>
-            <th>Size</th>
-            <th className="text-right">MRP</th>
-          </tr>
-        </thead>
-        <tbody>
-          {s.official.map((r, i) => (
-            <tr key={`${r.productKey}-${r.size}-${i}`}>
-              <td className="font-medium">{i > 0 && s.official[i - 1].variant === r.variant ? <span className="text-slate-300">〃</span> : r.variant}</td>
-              <td className="whitespace-nowrap">{r.size}</td>
-              <td className="whitespace-nowrap text-right font-bold">{formatINR(r.mrp)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ManualTable({ rows }: { rows: StatePrice[] }) {
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-line bg-white">
-      <table className="price-table">
-        <thead>
-          <tr>
-            <th>Variant</th>
-            <th>Size</th>
-            <th className="text-right">MRP</th>
-            <th className="hidden sm:table-cell">Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[...rows]
-            .sort((a, b) => a.variant.localeCompare(b.variant) || (a.ml ?? 0) - (b.ml ?? 0))
-            .map((r) => (
-              <tr key={r.id}>
-                <td className="font-medium">{r.variant || "—"}</td>
-                <td className="whitespace-nowrap">{r.size || "—"}</td>
-                <td className="whitespace-nowrap text-right font-bold">{formatINR(r.mrp)}</td>
-                <td className="hidden text-muted sm:table-cell">{r.note}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 
@@ -320,61 +258,38 @@ async function BrandContent({ params }: Pick<Props, "params">) {
         </section>
       )}
 
-      {variantTables.length > 0 && <StateWiseTabs brandName={brand.name} tables={variantTables} />}
-
-      <section className="mt-8">
-        <h2 className="text-2xl font-bold">{brand.name} Price List by State</h2>
-        {sections.length === 0 ? (
+      {variantTables.length > 0 ? (
+        <StateWiseTabs brandName={brand.name} tables={variantTables}>
+          {sections.some((s) => s.official.length) &&
+            sections
+              .filter((s) => s.official.length)
+              .map((s) => (
+                <span key={s.slug} className="block">
+                  {s.name}: official MRP for FY {fyLabel(s.official[0].fy)} from the{" "}
+                  {s.source ? (
+                    <a href={s.source.url} rel="nofollow noopener" target="_blank" className="text-link underline">
+                      {s.source.name}
+                    </a>
+                  ) : (
+                    "state excise department"
+                  )}
+                  {stats.lastSyncedAt ? `, checked ${formatDate(stats.lastSyncedAt)}` : ""}.
+                </span>
+              ))}
+          {sections.some((s) => s.manual.length) && (
+            <span className="block">
+              {sections.some((s) => s.official.length) ? "Other prices" : "Prices"} added by our team. Check the MRP printed on the bottle.
+            </span>
+          )}
+        </StateWiseTabs>
+      ) : (
+        <section className="mt-8">
+          <h2 className="text-2xl font-bold">{brand.name} Price State-wise</h2>
           <div className="note mt-3">
             <strong>State prices pending:</strong> {brand.name} is not on the official excise lists we track yet, and no state prices have been added. The range above is approximate.
           </div>
-        ) : (
-          <>
-            {sections.length > 1 && (
-              <nav aria-label="States" className="mt-3 flex flex-wrap gap-2">
-                {sections.map((s) => (
-                  <a key={s.slug} href={`#state-${s.slug}`} className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-bold text-link hover:border-link">
-                    {s.name}
-                  </a>
-                ))}
-              </nav>
-            )}
-            <div className="mt-4 space-y-8">
-              {sections.map((s) => (
-                <section key={s.slug} id={`state-${s.slug}`} className="scroll-mt-4">
-                  <h3 className="text-xl font-bold">
-                    {brand.name} price in {s.name}
-                  </h3>
-                  {s.official.length > 0 && (
-                    <>
-                      <p className="mt-1 mb-3 text-sm text-muted">
-                        Official MRP for FY {fyLabel(s.official[0].fy)} from the{" "}
-                        {s.source ? (
-                          <a href={s.source.url} rel="nofollow noopener" target="_blank" className="text-link underline">
-                            {s.source.name}
-                          </a>
-                        ) : (
-                          "state excise department"
-                        )}
-                        {stats.lastSyncedAt ? `, checked ${formatDate(stats.lastSyncedAt)}` : ""}.
-                      </p>
-                      <OfficialTable s={s} />
-                    </>
-                  )}
-                  {s.manual.length > 0 && (
-                    <>
-                      <p className={`${s.official.length ? "mt-4" : "mt-1"} mb-3 text-sm text-muted`}>
-                        {s.official.length ? "More prices added by our team." : `Prices added by our team for ${s.name}.`} Check the MRP printed on the bottle.
-                      </p>
-                      <ManualTable rows={s.manual} />
-                    </>
-                  )}
-                </section>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
+        </section>
+      )}
 
       {changes.length > 0 && (
         <section className="card mt-8">

@@ -1,22 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 export type VariantTable = {
   variant: string;
   sizes: { ml: number; label: string }[];
   rows: { slug: string; name: string; official: boolean; cells: (number | null)[] }[];
-  truncated: boolean;
 };
 
 const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 
 /**
- * State × size price table with one tab per variant.
+ * State × size price table with one tab per variant. This is the brand page's price list.
  * Every variant's table is in the server HTML (inactive ones are only hidden),
  * so search engines see all prices; tabs just switch which one is visible.
+ * `children` is the source note shown under the table.
  */
-export function StateWiseTabs({ brandName, tables }: { brandName: string; tables: VariantTable[] }) {
+export function StateWiseTabs({ brandName, tables, children }: { brandName: string; tables: VariantTable[]; children?: ReactNode }) {
   const [active, setActive] = useState(0);
   const many = tables.length > 1;
 
@@ -68,9 +68,7 @@ export function StateWiseTabs({ brandName, tables }: { brandName: string; tables
                 {t.rows.map((r) => (
                   <tr key={r.slug}>
                     <td className="sticky left-0 bg-white">
-                      <a href={`#state-${r.slug}`} className="font-semibold text-link hover:underline">
-                        {r.name}
-                      </a>
+                      <span className="font-semibold text-ink">{r.name}</span>
                       {r.official && (
                         <span className="mt-0.5 block w-fit rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-semibold text-green-700 sm:ml-1.5 sm:mt-0 sm:inline">
                           Official
@@ -87,12 +85,9 @@ export function StateWiseTabs({ brandName, tables }: { brandName: string; tables
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-xs text-muted">
-            {t.truncated && "Showing the most common sizes. "}
-            Tap a state for every size.
-          </p>
         </div>
       ))}
+      {children && <p className="mt-2 space-y-0.5 text-xs text-muted">{children}</p>}
     </section>
   );
 }
