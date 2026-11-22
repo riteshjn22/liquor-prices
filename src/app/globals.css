@@ -72,56 +72,108 @@ body {
   @apply mt-3 leading-relaxed text-muted;
 }
 
-/* Rich text written in the admin editor (brand blocks, About sections, law page, blog). */
-.rich {
+/*
+ * Rich text written in the admin editor (brand blocks, About sections, law page, blog).
+ * The same rules style the editor's writing area (.jodit-wysiwyg), so what you type looks like the site.
+ * Tailwind resets headings and lists, so they are restored here. Inline styles from the editor win.
+ */
+:is(.rich, .rich-editor .jodit-wysiwyg) {
   @apply leading-relaxed text-ink;
 }
-.rich > * + * {
+:is(.rich, .rich-editor .jodit-wysiwyg) > * + * {
   @apply mt-3;
 }
-.rich h2 {
-  @apply mt-6 text-xl font-bold text-navy;
+:is(.rich, .rich-editor .jodit-wysiwyg) :is(h1, h2, h3, h4, h5, h6) {
+  @apply font-bold text-navy;
 }
-.rich h3 {
-  @apply mt-5 text-lg font-bold text-navy;
+:is(.rich, .rich-editor .jodit-wysiwyg) h1 {
+  @apply mt-6 text-2xl;
 }
-.rich h4 {
-  @apply mt-4 font-bold text-navy;
+:is(.rich, .rich-editor .jodit-wysiwyg) h2 {
+  @apply mt-6 text-xl;
 }
-.rich p {
+:is(.rich, .rich-editor .jodit-wysiwyg) h3 {
+  @apply mt-5 text-lg;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) :is(h4, h5, h6) {
+  @apply mt-4;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) h6 {
+  @apply text-sm uppercase tracking-wide;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) p {
   @apply text-[#33404f];
 }
-.rich a {
+:is(.rich, .rich-editor .jodit-wysiwyg) a {
   @apply text-link underline;
 }
-.rich ul {
+:is(.rich, .rich-editor .jodit-wysiwyg) ul {
   @apply list-disc pl-6;
 }
-.rich ol {
+:is(.rich, .rich-editor .jodit-wysiwyg) ol {
   @apply list-decimal pl-6;
 }
-.rich li + li {
+:is(.rich, .rich-editor .jodit-wysiwyg) ol[type="a"] {
+  list-style-type: lower-alpha;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) ol[type="i"] {
+  list-style-type: lower-roman;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) li + li {
   @apply mt-1;
 }
-.rich blockquote {
+:is(.rich, .rich-editor .jodit-wysiwyg) blockquote {
   @apply border-l-4 border-gold bg-[#fffbeb] px-4 py-2 text-[#554719];
 }
-.rich img {
+:is(.rich, .rich-editor .jodit-wysiwyg) :is(img, video) {
   @apply h-auto max-w-full rounded-xl;
 }
-.rich hr {
-  @apply border-line;
+:is(.rich, .rich-editor .jodit-wysiwyg) iframe {
+  @apply aspect-video h-auto w-full max-w-full rounded-xl border-0;
 }
-.rich table {
+:is(.rich, .rich-editor .jodit-wysiwyg) figure {
+  @apply my-4;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) figcaption {
+  @apply mt-1 text-center text-sm text-muted;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) hr {
+  @apply my-6 border-line;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) table {
   @apply w-full border-collapse text-sm;
 }
-.rich th,
-.rich td {
-  @apply border border-line px-3 py-2 text-left;
+:is(.rich, .rich-editor .jodit-wysiwyg) :is(th, td) {
+  @apply border border-line px-3 py-2 text-left align-top;
 }
-.rich th {
+:is(.rich, .rich-editor .jodit-wysiwyg) th {
   @apply bg-tile font-semibold;
 }
-.rich > :first-child {
+:is(.rich, .rich-editor .jodit-wysiwyg) caption {
+  @apply pb-2 text-left text-sm font-semibold text-muted;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) pre {
+  @apply overflow-x-auto rounded-xl bg-navy p-4 text-sm text-white;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) :not(pre) > code {
+  @apply rounded bg-tile px-1.5 py-0.5 text-[0.9em];
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) mark {
+  @apply rounded bg-gold/40 px-0.5;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) details {
+  @apply rounded-xl border border-line bg-white px-4 py-3;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) summary {
+  @apply cursor-pointer font-semibold;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) :is(strong, b) {
+  @apply font-bold;
+}
+:is(.rich, .rich-editor .jodit-wysiwyg) > :first-child {
   @apply mt-0;
+}
+/* Wide tables scroll sideways on phones instead of breaking the page. */
+.rich table {
+  @apply block overflow-x-auto sm:table;
 }

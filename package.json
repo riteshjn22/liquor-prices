@@ -13,11 +13,8 @@
         "images:link": "tsx scripts/link-images.ts"
     },
     "dependencies": {
-        "@tiptap/extension-image": "^3.35.0",
-        "@tiptap/pm": "^3.35.0",
-        "@tiptap/react": "^3.35.0",
-        "@tiptap/starter-kit": "^3.35.0",
         "exceljs": "^4.4.0",
+        "jodit-react": "^5.11.0",
         "mongodb": "^7.9.1",
         "next": "16.4.6",
         "react": "19.3.0",

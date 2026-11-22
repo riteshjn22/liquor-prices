@@ -82,9 +82,14 @@ doesn't belong to one of your brands never appears on the site.
 
 ### Content, FAQs and blog
 
-The admin has tabs: **Brands · Pages · FAQs · Blog · Excel**. All text is written in a rich-text editor
-(headings, bold, lists, links, images, or raw HTML), and everything is **sanitized** before it is saved:
-scripts, styles, event handlers and `javascript:` links are stripped.
+The admin has tabs: **Brands · Pages · FAQs · Blog · Excel**. All text is written in a full HTML editor (Jodit):
+headings 1-6, fonts and colours, alignment, lists, tables, links, images, YouTube/Vimeo video, special characters,
+and a source view for writing or pasting raw HTML. Any normal HTML is kept (div/span/section with `class`, `id` and
+inline styles, figures, pre/code, details/summary, video/audio, YouTube / Vimeo / Google Maps embeds).
+
+Everything is **sanitized** before it is saved (and again when shown), so pasted code can't run in visitors' browsers:
+`<script>`, `<style>`, `onclick`-style handlers, `javascript:` links, CSS `url()`, forms, `<object>`/`<embed>` and
+iframes from other sites are removed. Images and media must use https addresses (ImageKit links work).
 
 | Where | What |
 |---|---|
