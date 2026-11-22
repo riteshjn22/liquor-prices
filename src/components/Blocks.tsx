@@ -82,7 +82,7 @@ export function BrandCards({ brands }: { brands: BrandSummary[] }) {
   );
 }
 
-export function CategoryTiles({ categories }: { categories: CategorySummary[] }) {
+export function CategoryTiles({ categories, showCount = true }: { categories: CategorySummary[]; showCount?: boolean }) {
   return (
     <ul className="grid grid-cols-3 gap-2.5 sm:grid-cols-6">
       {categories.map((c) => (
@@ -92,7 +92,7 @@ export function CategoryTiles({ categories }: { categories: CategorySummary[] })
               {c.emoji}
             </span>
             <strong className="block text-[15px]">{c.name}</strong>
-            <span className="text-xs text-muted">{c.brandCount} brands</span>
+            {showCount && <span className="text-xs text-muted">{c.brandCount} brands</span>}
           </Link>
         </li>
       ))}

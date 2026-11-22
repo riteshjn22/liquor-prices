@@ -221,6 +221,23 @@ export type BlogPost = {
   publishedAt: string; // YYYY-MM-DD
   seoTitle?: string;
   seoDescription?: string;
+  /** Slug of a BlogCategory; empty when the post has no category. */
+  category?: string;
   createdAt: string;
   updatedAt: string;
 };
+
+export type PillColor = "red" | "blue" | "green" | "amber" | "purple" | "gray";
+
+/** Blog category, managed in the admin Blog tab. Its posts are listed at /blog/category/<slug>. */
+export type BlogCategory = {
+  slug: string;
+  name: string;
+  description: string; // plain text: shown on the category page and used as its meta description
+  color: PillColor;
+  order: number;
+  updatedAt: string;
+};
+
+/** One of the four "Explore Information" cards on the home page. */
+export type HomeCard = { id: string; title: string; subtitle: string; href: string };

@@ -14,6 +14,7 @@ You choose which brands appear: every brand can be switched on or off in the adm
 /prices/rum/old-monk                brand page: range, price table per state, FAQ, similar brands
 /law                                liquor laws page (content written in the admin)
 /blog, /blog/<slug>                 blog (posts written in the admin)
+/blog/category/<slug>               posts in one blog category
 /admin                              password-protected: brands, page content, FAQs, blog, Excel
 /sitemap.xml  /robots.txt
 ```
@@ -94,9 +95,9 @@ iframes from other sites are removed. Images and media must use https addresses 
 | Where | What |
 |---|---|
 | Brands → **✎ Edit content** | Content block shown above “Price State-wise” on the brand page (also the Excel *Description* column) |
-| **Pages** | `/prices` About section (hidden until written), each category's About section (default text until written), the `/law` page (heading + content; “coming soon” and `noindex` until written). Also in the Excel *Page content* sheet |
+| **Pages** | Home page **Explore Information** cards (Dry Days, Laws & Rules, Price Information, Awareness): title, short text and link, which can be a page here (`/blog/category/dry-days`) or an https:// address. `/prices` About section (hidden until written), each category's About section (default text until written), the `/law` page (heading + content; “coming soon” and `noindex` until written). Also in the Excel *Page content* sheet |
 | **FAQs** | Pick any page (home, prices, categories, brands, law, blog, blog posts) and add / reorder / delete questions. Pages without FAQs show none; there are no automatic FAQs |
-| **Blog** | Create, edit, publish/unpublish and delete posts at `/blog/<slug>`, with excerpt, cover image (ImageKit path or https URL), SEO title/description and publish date. Drafts are hidden (404) |
+| **Blog** | Create, edit, publish/unpublish and delete posts at `/blog/<slug>`, with excerpt, cover image (ImageKit path or https URL), SEO title/description, publish date and **category**. Drafts are hidden (404). **Categories** (name, URL, description, label colour, order) are managed at the top of the tab; renaming a category moves its posts, deleting one leaves its posts uncategorised. The home page *Latest Updates* shows the 3 newest posts with their category label |
 
 **Price ranges** on brand pages and category lists run from the lowest to the highest price in the brand's
 state-wise table (official prices and prices added in Excel). Your Excel “Price range in India” is shown only

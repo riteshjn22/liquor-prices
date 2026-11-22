@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { getJson, Notice, sendJson } from "./api";
+import { BlogCategories, CategoryPill, type CategoryRow } from "./BlogCategories";
 import { RichEditor } from "./RichEditor";
 
-type Row = { slug: string; title: string; published: boolean; publishedAt: string; updatedAt: string };
+type Row = { slug: string; title: string; category?: string; published: boolean; publishedAt: string; updatedAt: string };
 type Form = {
   originalSlug: string;
   title: string;
@@ -16,6 +17,7 @@ type Form = {
   publishedAt: string;
   seoTitle: string;
   seoDescription: string;
+  category: string;
 };
 
 const slugify = (s: string) =>
@@ -27,11 +29,12 @@ const slugify = (s: string) =>
     .replace(/^-+|-+$/g, "");
 
 const today = () => new Date().toISOString().slice(0, 10);
-const blank = (): Form => ({ originalSlug: "", title: "", slug: "", excerpt: "", coverImage: "", html: "", published: false, publishedAt: today(), seoTitle: "", seoDescription: "" });
+const blank = (): Form => ({ originalSlug: "", title: "", slug: "", excerpt: "", coverImage: "", html: "", published: false, publishedAt: today(), seoTitle: "", seoDescription: "", category: "" });
 
 /** Blog posts: list, create, edit, publish/unpublish, delete. Posts appear at /blog/<slug>. */
 export function BlogManager() {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [cats, setCats] = useState<CategoryRow[] | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
@@ -40,7 +43,9 @@ export function BlogManager() {
 
   const load = useCallback(async () => {
     try {
-      setRows((await getJson<{ posts: Row[] }>("/api/admin/posts")).posts);
+      const [p, c] = await Promise.all([getJson<{ posts: Row[] }>("/api/admin/posts"), getJson<{ categories: CategoryRow[] }>("/api/admin/blog-categories")]);
+      setRows(p.posts);
+      setCats(c.categories);
     } catch (e) {
       setMsg({ kind: "error", text: `Could not load posts: ${(e as Error).message}` });
     }
@@ -58,8 +63,8 @@ export function BlogManager() {
   };
   const edit = async (slug: string) => {
     try {
-      const { post } = await getJson<{ post: Form & { seoTitle?: string; seoDescription?: string } }>(`/api/admin/posts?slug=${encodeURIComponent(slug)}`);
-      setForm({ ...blank(), ...post, seoTitle: post.seoTitle ?? "", seoDescription: post.seoDescription ?? "", originalSlug: slug });
+      const { post } = await getJson<{ post: Form & { seoTitle?: string; seoDescription?: string; category?: string } }>(`/api/admin/posts?slug=${encodeURIComponent(slug)}`);
+      setForm({ ...blank(), ...post, seoTitle: post.seoTitle ?? "", seoDescription: post.seoDescription ?? "", category: post.category ?? "", originalSlug: slug });
       setSlugTouched(true);
       setEditorKey((k) => k + 1);
       setMsg(null);
@@ -68,6 +73,10 @@ export function BlogManager() {
     }
   };
   const set = (patch: Partial<Form>) => setForm((f) => (f ? { ...f, ...patch } : f));
+  const catCell = (slug?: string) => {
+    const c = slug ? cats?.find((x) => x.slug === slug) : undefined;
+    return c ? <CategoryPill color={c.color}>{c.name}</CategoryPill> : <span className="text-xs text-muted">None</span>;
+  };
 
   const save = async () => {
     if (!form) return;
@@ -105,6 +114,9 @@ export function BlogManager() {
         </button>
       </div>
       <p className="mt-1 text-sm text-muted">Posts appear at /blog. Drafts stay hidden until you tick “Published”.</p>
+      <div className="mt-4">
+        <BlogCategories categories={cats} onChanged={load} />
+      </div>
 
       {rows && rows.length > 0 && (
         <div className="mt-4 overflow-x-auto rounded-xl border border-line">
@@ -112,6 +124,7 @@ export function BlogManager() {
             <thead>
               <tr>
                 <th>Title</th>
+                <th className="hidden sm:table-cell">Category</th>
                 <th>Status</th>
                 <th className="hidden sm:table-cell">Date</th>
                 <th />
@@ -124,6 +137,7 @@ export function BlogManager() {
                     <span className="font-semibold">{r.title}</span>
                     <span className="block text-xs text-muted">/blog/{r.slug}</span>
                   </td>
+                  <td className="hidden sm:table-cell">{catCell(r.category)}</td>
                   <td>{r.published ? <span className="text-green-700">Published</span> : <span className="text-muted">Draft</span>}</td>
                   <td className="hidden sm:table-cell">{r.publishedAt}</td>
                   <td className="whitespace-nowrap text-right">
@@ -169,6 +183,18 @@ export function BlogManager() {
               onBlur={() => set({ slug: slugify(form.slug) })}
               className="mt-1 w-full rounded-lg border border-line px-3 py-2 font-normal"
             />
+          </label>
+          <label className="block text-sm font-semibold">
+            Category
+            <select value={form.category} onChange={(e) => set({ category: e.target.value })} className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 font-normal">
+              <option value="">No category</option>
+              {cats?.map((c) => (
+                <option key={c.slug} value={c.slug}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {cats?.length === 0 && <span className="mt-1 block text-xs font-normal text-muted">Add categories above to group posts.</span>}
           </label>
           <label className="block text-sm font-semibold">
             Excerpt <span className="font-normal text-muted">(shown in the blog list)</span>

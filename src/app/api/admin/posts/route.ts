@@ -4,7 +4,8 @@ import { PRICES_TAG } from "@/lib/config";
 import { COLLECTIONS, ensureIndexes, getDb } from "@/lib/mongodb";
 import { slugify } from "@/lib/normalize";
 import { toSafeHtml } from "@/lib/rich-text";
-import type { BlogPost, FaqDoc } from "@/lib/types";
+import { RESERVED_POST_SLUGS } from "@/lib/blog";
+import type { BlogCategory, BlogPost, FaqDoc } from "@/lib/types";
 
 const noStore = { headers: { "Cache-Control": "private, no-store" } };
 
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     return post ? Response.json({ post }, noStore) : Response.json({ error: "Unknown post." }, { status: 404 });
   }
   const posts = await col
-    .find({}, { projection: { _id: 0, slug: 1, title: 1, published: 1, publishedAt: 1, updatedAt: 1 } })
+    .find({}, { projection: { _id: 0, slug: 1, title: 1, category: 1, published: 1, publishedAt: 1, updatedAt: 1 } })
     .sort({ publishedAt: -1, createdAt: -1 })
     .toArray();
   return Response.json({ posts }, noStore);
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
   if (!title) return Response.json({ error: "Title is required." }, { status: 400 });
   const slug = slugify(str(b.slug, 120) || title);
   if (!slug) return Response.json({ error: "The URL slug needs letters or numbers." }, { status: 400 });
+  if (RESERVED_POST_SLUGS.has(slug)) return Response.json({ error: `/blog/${slug} is reserved; choose another URL.` }, { status: 400 });
   const publishedAt = str(b.publishedAt, 10);
   if (publishedAt && !/^\d{4}-\d{2}-\d{2}$/.test(publishedAt)) return Response.json({ error: "Publish date must be YYYY-MM-DD." }, { status: 400 });
   const coverImage = str(b.coverImage, 500);
@@ -55,6 +57,11 @@ export async function POST(request: Request) {
   if (originalSlug && !existing) return Response.json({ error: "The post you are editing no longer exists." }, { status: 404 });
   if (slug !== originalSlug && (await col.countDocuments({ slug }))) return Response.json({ error: `Another post already uses the URL /blog/${slug}.` }, { status: 409 });
 
+  const category = str(b.category, 80);
+  if (category && !(await db.collection<BlogCategory>(COLLECTIONS.blogCategories).countDocuments({ slug: category }))) {
+    return Response.json({ error: "That blog category no longer exists. Reload and pick another." }, { status: 400 });
+  }
+
   const now = new Date().toISOString();
   const doc: Omit<BlogPost, "createdAt"> = {
     slug,
@@ -68,8 +75,10 @@ export async function POST(request: Request) {
     seoDescription: str(b.seoDescription, 320) || undefined,
     updatedAt: now,
   };
+  // Left out (not undefined) when empty, so it can be $unset without a conflict.
+  if (category) doc.category = category;
   if (existing) {
-    await col.updateOne({ slug: originalSlug }, { $set: doc });
+    await col.updateOne({ slug: originalSlug }, category ? { $set: doc } : { $set: doc, $unset: { category: "" } });
     if (slug !== originalSlug) await db.collection<FaqDoc>(COLLECTIONS.faqs).updateOne({ page: `post:${originalSlug}` }, { $set: { page: `post:${slug}` } });
   } else {
     await col.insertOne({ ...doc, createdAt: now });

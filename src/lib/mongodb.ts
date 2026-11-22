@@ -44,6 +44,9 @@ export const COLLECTIONS = {
   /** Admin-managed FAQs, one document per page. */
   faqs: "faqs",
   posts: "posts",
+  blogCategories: "blog_categories",
+  /** Small site settings, one document per key (e.g. "home:cards"). */
+  settings: "settings",
 } as const;
 
 let indexesReady: Promise<void> | null = null;
@@ -72,7 +75,10 @@ export function ensureIndexes(db: Db): Promise<void> {
       await db.collection(COLLECTIONS.posts).createIndexes([
         { key: { slug: 1 }, unique: true, name: "slug_unique" },
         { key: { published: 1, publishedAt: -1 }, name: "published_date" },
+        { key: { category: 1, published: 1, publishedAt: -1 }, name: "category_published_date" },
       ]);
+      await db.collection(COLLECTIONS.blogCategories).createIndex({ slug: 1 }, { unique: true });
+      await db.collection(COLLECTIONS.settings).createIndex({ key: 1 }, { unique: true });
     })().catch((err) => {
       indexesReady = null;
       throw err;

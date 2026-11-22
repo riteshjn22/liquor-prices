@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BlogManager } from "./admin/BlogManager";
 import { BrandContentEditor } from "./admin/BrandContentEditor";
 import { FaqManager } from "./admin/FaqManager";
+import { HomeCardsEditor } from "./admin/HomeCardsEditor";
 import { PagesManager } from "./admin/PagesManager";
 
 type Category = { slug: string; name: string };
@@ -71,7 +72,12 @@ export function AdminPanel({ categories, faqPages }: { categories: Category[]; f
         ))}
       </nav>
       {tab === "brands" && <BrandManager categories={categories} reloadKey={reloadKey} />}
-      {tab === "pages" && <PagesManager />}
+      {tab === "pages" && (
+        <>
+          <HomeCardsEditor />
+          <PagesManager />
+        </>
+      )}
       {tab === "faqs" && <FaqManager fixedPages={faqPages} />}
       {tab === "blog" && <BlogManager />}
       {tab === "excel" && <ExcelSection onApplied={() => setReloadKey((k) => k + 1)} />}

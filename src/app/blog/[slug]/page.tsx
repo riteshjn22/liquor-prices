@@ -3,13 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Faq } from "@/components/Blocks";
+import { Pill } from "@/components/BlogBlocks";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { RichText } from "@/components/RichText";
 import { SITE_NAME, SITE_URL } from "@/lib/config";
 import { coverUrl } from "@/lib/cover";
-import { getFaqs, getPost, getPublishedPosts } from "@/lib/data";
+import { getBlogCategories, getFaqs, getPost, getPublishedPosts } from "@/lib/data";
 import { formatDate } from "@/lib/format";
 
 // Crawlers always get complete HTML; new posts render on first visit, then are cached.
@@ -53,17 +54,37 @@ export default function BlogPostPage({ params }: Props) {
 async function PostContent({ params }: Pick<Props, "params">) {
   const post = await load(params);
   if (!post) notFound();
-  const [faqs, recent] = await Promise.all([getFaqs(`post:${post.slug}`), getPublishedPosts(4)]);
-  const more = recent.filter((p) => p.slug !== post.slug).slice(0, 3);
+  const [faqs, recent, categories, sameCategory] = await Promise.all([
+    getFaqs(`post:${post.slug}`),
+    getPublishedPosts(4),
+    getBlogCategories(),
+    post.category ? getPublishedPosts(4, post.category) : Promise.resolve([]),
+  ]);
+  const category = post.category ? categories.find((c) => c.slug === post.category) : undefined;
+  // Posts from the same category first, then the newest others.
+  const more = [...sameCategory, ...recent].filter((p, i, all) => p.slug !== post.slug && all.findIndex((x) => x.slug === p.slug) === i).slice(0, 3);
   const img = coverUrl(post.coverImage, 1200, 630);
 
   return (
     <article className="mx-auto max-w-3xl">
-      <Breadcrumbs items={[{ name: "Blog", href: "/blog" }, { name: post.title, href: `/blog/${post.slug}` }]} />
+      <Breadcrumbs
+        items={[
+          { name: "Blog", href: "/blog" },
+          ...(category ? [{ name: category.name, href: `/blog/category/${category.slug}` }] : []),
+          { name: post.title, href: `/blog/${post.slug}` },
+        ]}
+      />
       <h1 className="mt-5 text-[clamp(27px,4vw,40px)] font-extrabold leading-tight text-navy">{post.title}</h1>
-      <time dateTime={post.publishedAt} className="mt-2 block text-sm text-muted">
-        {formatDate(post.publishedAt)}
-      </time>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {category && (
+          <Link href={`/blog/category/${category.slug}`}>
+            <Pill color={category.color}>{category.name}</Pill>
+          </Link>
+        )}
+        <time dateTime={post.publishedAt} className="text-sm text-muted">
+          {formatDate(post.publishedAt)}
+        </time>
+      </div>
       {img && (
         // eslint-disable-next-line @next/next/no-img-element -- ImageKit resizes; skip Vercel's optimiser quota
         <img src={img} alt="" width={1200} height={630} fetchPriority="high" className="mt-5 aspect-video w-full rounded-2xl object-cover" />
@@ -96,6 +117,7 @@ async function PostContent({ params }: Pick<Props, "params">) {
           url: `${SITE_URL}/blog/${post.slug}`,
           ...(img ? { image: img } : {}),
           ...(post.excerpt ? { description: post.excerpt } : {}),
+          ...(category ? { articleSection: category.name } : {}),
           publisher: { "@type": "Organization", name: SITE_NAME },
         }}
       />

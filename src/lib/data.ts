@@ -1,10 +1,11 @@
 import { cacheLife, cacheTag } from "next/cache";
+import { mergeHomeCards } from "./blog";
 import { variantLabel } from "./brand-match";
 import { CATEGORIES } from "./categories";
 import { PRICES_TAG } from "./config";
 import { COLLECTIONS, getDb } from "./mongodb";
 import { isEmptyHtml } from "./rich-text";
-import type { BlogPost, BrandDoc, BrandPriceChange, BrandSummary, CategorySummary, Faq, FaqDoc, PageContent, PriceChange, ProductDoc, StatePrice } from "./types";
+import type { BlogCategory, BlogPost, HomeCard, BrandDoc, BrandPriceChange, BrandSummary, CategorySummary, Faq, FaqDoc, PageContent, PriceChange, ProductDoc, StatePrice } from "./types";
 
 /**
  * Every read here is cached and tagged. Pages built from them are static;
@@ -324,17 +325,17 @@ export async function getFaqs(page: string): Promise<Faq[]> {
 
 // ---------------------------------------------------------------- blog
 
-const POST_LIST_PROJECTION = { _id: 0, slug: 1, title: 1, excerpt: 1, coverImage: 1, publishedAt: 1, updatedAt: 1 } as const;
-export type PostSummary = Pick<BlogPost, "slug" | "title" | "excerpt" | "coverImage" | "publishedAt" | "updatedAt">;
+const POST_LIST_PROJECTION = { _id: 0, slug: 1, title: 1, excerpt: 1, coverImage: 1, category: 1, publishedAt: 1, updatedAt: 1 } as const;
+export type PostSummary = Pick<BlogPost, "slug" | "title" | "excerpt" | "coverImage" | "category" | "publishedAt" | "updatedAt">;
 
-/** Published posts, newest first. */
-export async function getPublishedPosts(limit = 200): Promise<PostSummary[]> {
+/** Published posts, newest first; only one category's when `category` is given. */
+export async function getPublishedPosts(limit = 200, category?: string): Promise<PostSummary[]> {
   "use cache";
   cached();
   const db = await getDb();
   const rows = await db
     .collection<BlogPost>(COLLECTIONS.posts)
-    .find({ published: true }, { projection: POST_LIST_PROJECTION })
+    .find(category ? { published: true, category } : { published: true }, { projection: POST_LIST_PROJECTION })
     .sort({ publishedAt: -1, createdAt: -1 })
     .limit(limit)
     .toArray();
@@ -348,4 +349,33 @@ export async function getPost(slug: string): Promise<BlogPost | null> {
   const db = await getDb();
   const doc = (await db.collection<BlogPost>(COLLECTIONS.posts).findOne({ slug, published: true }, { projection: { _id: 0 } })) as BlogPost | null;
   return doc ?? null;
+}
+
+export type BlogCategoryWithCount = BlogCategory & { postCount: number };
+
+/** All blog categories in admin order, with how many published posts each has. */
+export async function getBlogCategories(): Promise<BlogCategoryWithCount[]> {
+  "use cache";
+  cached();
+  const db = await getDb();
+  const [cats, counts] = await Promise.all([
+    db.collection<BlogCategory>(COLLECTIONS.blogCategories).find({}, { projection: { _id: 0 } }).sort({ order: 1, name: 1 }).toArray(),
+    db
+      .collection<BlogPost>(COLLECTIONS.posts)
+      .aggregate<{ _id: string; n: number }>([{ $match: { published: true, category: { $nin: [null, ""] } } }, { $group: { _id: "$category", n: { $sum: 1 } } }])
+      .toArray(),
+  ]);
+  const bySlug = new Map(counts.map((c) => [c._id, c.n]));
+  return (cats as BlogCategory[]).map((c) => ({ ...c, postCount: bySlug.get(c.slug) ?? 0 }));
+}
+
+// ---------------------------------------------------------------- home page
+
+/** The four "Explore Information" cards, with admin edits applied over the defaults. */
+export async function getHomeCards(): Promise<HomeCard[]> {
+  "use cache";
+  cached();
+  const db = await getDb();
+  const doc = await db.collection<{ key: string; cards?: Partial<HomeCard>[] }>(COLLECTIONS.settings).findOne({ key: "home:cards" }, { projection: { _id: 0, cards: 1 } });
+  return mergeHomeCards(doc?.cards);
 }
