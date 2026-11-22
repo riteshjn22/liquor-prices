@@ -1,12 +1,13 @@
-# Optional backup for the Vercel cron: runs the same sync from GitHub's servers.
-# Enable by adding repository secrets MONGODB_URI, REVALIDATE_SECRET and
+# Fetch the Delhi excise prices from GitHub's servers. MANUAL ONLY: there is no
+# schedule, so it runs only when you press "Run workflow" in the Actions tab.
+# Needs repository secrets MONGODB_URI, REVALIDATE_SECRET and
 # SITE_URL_FOR_REVALIDATE (Settings > Secrets and variables > Actions).
-# Useful if the Vercel function ever times out or the source is slow.
+# To run it automatically again, add under `on:`
+#   schedule:
+#     - cron: "0 22 * * *"   # 03:30 IST daily
 name: Sync prices
 
 on:
-  schedule:
-    - cron: "0 22 * * *" # 03:30 IST, 30 min after the Vercel cron
   workflow_dispatch:
     inputs:
       force:

@@ -2,7 +2,7 @@
 
 SEO-first liquor price directory for India. One page per **brand** from your own brand list,
 with an approximate India price range plus **state-wise price tables**:
-- **Delhi** prices come automatically from the Delhi excise department (synced daily).
+- **Delhi** prices come from the Delhi excise department list. Fetching is **manual** (no schedule): run a sync when you want fresh prices.
 - **Other states** are prices you add in Excel.
 
 You choose which brands appear: every brand can be switched on or off in the admin.
@@ -12,7 +12,6 @@ You choose which brands appear: every brand can be switched on or off in the adm
 /prices                             category directory
 /prices/whisky                      A–Z list of enabled whisky brands with price ranges
 /prices/rum/old-monk                brand page: range, price table per state, FAQ, similar brands
-/search?q=...                       search (noindex)
 /admin                              password-protected: brand on/off switches, Excel export / import
 /sitemap.xml  /robots.txt
 ```
@@ -20,7 +19,7 @@ You choose which brands appear: every brand can be switched on or off in the adm
 Categories (whisky, beer, wine, vodka, rum, brandy) are defined in `src/lib/categories.ts`.
 Delhi's beer types (light, strong, draught) are grouped under "beer", and cognac under "brandy".
 
-**Stack:** Next.js 16 (App Router, Cache Components) · MongoDB Atlas · Vercel (hosting + daily cron) · ImageKit (brand images, optional).
+**Stack:** Next.js 16 (App Router, Cache Components) · MongoDB Atlas · Vercel (hosting) · ImageKit (brand images, optional).
 
 ---
 
@@ -97,7 +96,7 @@ doesn't belong to one of your brands never appears on the site.
   with a `Brand` column and a price column. Missing brands are created; existing ones get their price range refreshed.
   Duplicate rows are merged with a warning.
 - Brand page URLs never change after a brand is created (renaming keeps the URL; category can't be changed).
-- The daily sync never overwrites your brands, state prices, assignments or variant names.
+- A price sync never overwrites your brands, state prices, assignments or variant names.
 
 ---
 
@@ -142,9 +141,10 @@ git push -u origin main
 
 3. Deploy. `vercel.json` already:
    - runs functions in **Mumbai (`bom1`)**, close to the Delhi server and to Atlas;
-   - schedules **`/api/cron/sync` daily at 21:30 UTC (03:00 IST)**. Vercel sends the `CRON_SECRET` automatically.
-4. Check it: *Settings → Cron Jobs → Run*, or
+   - has **no cron**: prices are never fetched automatically.
+4. To fetch Delhi prices by hand on the live site:
    `curl -H "Authorization: Bearer <CRON_SECRET>" https://your-domain.com/api/cron/sync`
+   To make it automatic again, add to `vercel.json`: `"crons": [{ "path": "/api/cron/sync", "schedule": "30 21 * * *" }]` (03:00 IST daily).
 5. Add your domain, then submit `https://your-domain.com/sitemap.xml` in Google Search Console.
 
 > Changing `NEXT_PUBLIC_*` variables needs a redeploy, because they are baked in at build time.
@@ -162,10 +162,10 @@ Pages show a built-in bottle illustration until a photo is linked.
 
 You can also type an image path in the Brands sheet of the admin Excel.
 
-### 5. Optional backup sync (GitHub Actions)
+### 5. Optional manual sync (GitHub Actions)
 
-`.github/workflows/sync.yml` runs the same sync from GitHub every day, with no 60-second limit.
-Use it if the Vercel cron times out because the government server is slow.
+`.github/workflows/sync.yml` runs the same sync from GitHub, with no 60-second limit. It has **no schedule**:
+it runs only when you press *Run workflow* in the repository's *Actions* tab.
 Add repository secrets `MONGODB_URI`, `REVALIDATE_SECRET` and `SITE_URL_FOR_REVALIDATE`.
 
 ---
@@ -174,7 +174,7 @@ Add repository secrets `MONGODB_URI`, `REVALIDATE_SECRET` and `SITE_URL_FOR_REVA
 
 ```
 Your brand list (Excel)  ──>  brands         one per page: name, category, enabled, price range, content
-Delhi excise API (daily) ──>  products       ~2,500 official products with every size and MRP
+Delhi excise API (manual) ─>  products       ~2,500 official products with every size and MRP
                                   │           linked to a brand by name (longest match wins, so
                                   │           "Old Monk Coffee" products go to that brand, not "Old Monk")
 Your Excel (State prices)──>  state_prices   prices you add for any state
@@ -192,7 +192,7 @@ Brand page = brand + its Delhi products (official table) + state prices (one tab
 
 ### Rendering and SEO
 
-- Every page is static. Data reads use `'use cache'` with the `prices` tag, refreshed by the daily sync and by admin changes.
+- Every page is static. Data reads use `'use cache'` with the `prices` tag, refreshed after a price sync and after admin changes.
 - `ensureStatic = "navigation"` means crawlers always get complete HTML.
 - Unique title, description and canonical on every page; real 404s for unknown or disabled brands.
 - Structured data: BreadcrumbList, FAQPage, ItemList (category pages), Product + AggregateOffer (brand pages, from listed prices only).

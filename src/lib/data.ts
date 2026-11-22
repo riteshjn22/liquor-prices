@@ -7,7 +7,7 @@ import type { BrandDoc, BrandPriceChange, BrandSummary, CategorySummary, PriceCh
 
 /**
  * Every read here is cached and tagged. Pages built from them are static;
- * the daily sync and admin changes call revalidateTag(PRICES_TAG) to refresh them.
+ * a price sync and admin changes call revalidateTag(PRICES_TAG) to refresh them.
  */
 function cached() {
   cacheLife("days");

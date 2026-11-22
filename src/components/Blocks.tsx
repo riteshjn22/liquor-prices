@@ -105,7 +105,7 @@ export function CategoryTiles({ categories }: { categories: CategorySummary[] })
 }
 
 export function ChangesList({ changes }: { changes: BrandPriceChange[] }) {
-  if (!changes.length) return <p className="text-sm text-muted">No price changes recorded yet. Changes appear here after the daily excise sync.</p>;
+  if (!changes.length) return <p className="text-sm text-muted">No price changes recorded yet. Changes appear here after the excise price list is synced.</p>;
   return (
     <ul className="divide-y divide-line text-sm">
       {changes.map((c) => {

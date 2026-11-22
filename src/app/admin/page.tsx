@@ -13,7 +13,7 @@ export default function AdminPage() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-3xl font-extrabold text-navy">Admin</h1>
       <p className="mt-2 text-muted">
-        Switch brands on or off, and manage brands and state prices with Excel. Delhi prices update automatically every day.
+        Switch brands on or off, and manage brands and state prices with Excel. Delhi prices are not fetched automatically; they change only when you run a sync.
       </p>
       <div className="mt-6">
         <AdminPanel categories={CATEGORIES.map((c) => ({ slug: c.slug, name: c.name }))} />

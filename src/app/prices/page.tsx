@@ -70,7 +70,7 @@ export default async function PricesPage() {
           { q: "Why do liquor prices differ from state to state?", a: "Each state sets its own excise duty, taxes and pricing rules, so the same bottle can have a different MRP in different states." },
           { q: "Are liquor prices the same for every bottle size?", a: "No. Prices vary by pack size and variant. Each brand page lists prices per size." },
           { q: "Are the prices on this site official?", a: "Prices in the state tables marked as official come from state excise department price lists. Price ranges are indicative. Always check the MRP printed on the bottle." },
-          { q: "How often are prices updated?", a: "Official excise lists are checked every day. Other state prices are updated when new information is available." },
+          { q: "How often are prices updated?", a: "Prices are updated when new information from state excise departments or other reliable sources is available." },
         ]}
       />
     </div>

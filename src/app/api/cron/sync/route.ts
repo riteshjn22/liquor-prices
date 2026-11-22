@@ -7,8 +7,9 @@ import { runSync } from "@/lib/sync";
 export const maxDuration = 60;
 
 /**
- * Called daily by Vercel Cron (see vercel.json). Vercel sends
- * "Authorization: Bearer <CRON_SECRET>" automatically when CRON_SECRET is set.
+ * Fetches the latest excise prices. NOT scheduled: vercel.json has no cron, so it runs only when called by hand:
+ *   curl -H "Authorization: Bearer <CRON_SECRET>" https://your-site/api/cron/sync
+ * To schedule it again, add a "crons" entry for /api/cron/sync to vercel.json.
  * Add ?force=1 to rewrite data even when the source hasn't changed.
  */
 export async function GET(request: NextRequest) {
