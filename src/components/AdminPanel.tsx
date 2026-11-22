@@ -239,6 +239,7 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
 
 function ExcelSection({ onApplied }: { onApplied: () => void }) {
   const [file, setFile] = useState<File | null>(null);
+  const [fullList, setFullList] = useState(false);
   const [busy, setBusy] = useState<"preview" | "apply" | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -251,6 +252,7 @@ function ExcelSection({ onApplied }: { onApplied: () => void }) {
       const body = new FormData();
       body.set("file", file);
       body.set("mode", mode);
+      if (fullList) body.set("fullList", "1");
       const res = await fetch("/api/admin/import", { method: "POST", body });
       const json = (await res.json().catch(() => ({ error: `Server returned HTTP ${res.status}` }))) as Partial<Result>;
       if (json.mode) setResult(json as Result);
@@ -281,7 +283,8 @@ function ExcelSection({ onApplied }: { onApplied: () => void }) {
         <h2 className="text-lg font-bold">Upload Excel</h2>
         <p className="mt-1 text-sm text-muted">
           Upload an edited file from “Download Excel”, or a brand list (sheets like “Whiskies”, “Beers” with Brand and Price
-          columns) to add brands. You will see every change first; nothing is saved until you press Apply.
+          columns) to add brands. Enter state prices in the “Prices by state” sheet: add a column named after a state (e.g.
+          Haryana) and type the prices. You will see every change first; nothing is saved until you press Apply.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <input
@@ -297,6 +300,17 @@ function ExcelSection({ onApplied }: { onApplied: () => void }) {
           <button disabled={!file || busy !== null} onClick={() => send("preview")} className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
             {busy === "preview" ? "Checking…" : "Preview changes"}
           </button>
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={fullList}
+              onChange={(e) => {
+                setFullList(e.target.checked);
+                setResult(null);
+              }}
+            />
+            Full brand list: switch off brands that aren&apos;t in this file
+          </label>
           {canApply && (
             <button disabled={busy !== null} onClick={() => send("apply")} className="rounded-lg bg-gold px-4 py-2 text-sm font-bold text-navy disabled:opacity-40">
               {busy === "apply" ? "Saving…" : `Apply ${result.totalChanges} change${result.totalChanges === 1 ? "" : "s"}`}
@@ -317,7 +331,7 @@ function ExcelSection({ onApplied }: { onApplied: () => void }) {
               <p>
                 <b>{result.fileName}</b>
                 {result.format === "brand-list" ? " (brand list)" : ""}: read {result.rows.brands} brand rows
-                {result.format === "workbook" && `, ${result.rows.statePrices} state price rows and ${result.rows.products} Delhi product rows`}.{" "}
+                {result.format === "workbook" && `, ${result.rows.statePrices} price rows and ${result.rows.products} Delhi product rows`}.{" "}
                 {result.totalChanges === 0 ? (
                   <b>No changes found.</b>
                 ) : (
@@ -375,7 +389,8 @@ function IssueList({ title, tone, issues }: { title: string; tone: "red" | "ambe
       <ul className="mt-1 max-h-60 list-disc space-y-0.5 overflow-y-auto pl-5">
         {issues.map((e, i) => (
           <li key={i}>
-            {e.sheet} sheet, row {e.row}: {e.message}
+            {e.sheet !== "-" && `${e.sheet} sheet${e.row > 0 ? `, row ${e.row}` : ""}: `}
+            {e.message}
           </li>
         ))}
       </ul>

@@ -4,13 +4,15 @@ import { formatRange, parsePriceRange } from "./brand-match";
 import { CATEGORIES, categoryForExciseType, categoryForSheet, categoryFromText } from "./categories";
 import { SITE_URL } from "./config";
 import { parseMeasureMl, slugify } from "./normalize";
+import { addPriceGridSheet, GRID_SHEET, planPriceGrid, type GridProduct } from "./price-grid";
 import { findState, stateName } from "./states";
 import type { BrandDoc, ProductDoc, StatePrice } from "./types";
 
 /*
  * Excel round-trip for the admin.
  *   Brands        one row per brand family (create, rename, enable/disable, price range, SEO text...)
- *   State prices  prices you add by hand for any state
+ *   Prices by state  one row per brand/variant/size, one column per state (see price-grid.ts)
+ *   State prices  older one-row-per-price format, still accepted on upload
  *   Delhi products  which official product belongs to which brand
  * Columns are matched by header text. Rows missing from an upload are left untouched.
  * Also accepts a plain brand list: sheets named "Whiskies", "Beers"... with Brand + Price columns.
@@ -56,7 +58,6 @@ export const PRODUCT_COLS = {
 } as const;
 
 const BRAND_EDITABLE = new Set<string>([BRAND_COLS.category, BRAND_COLS.name, BRAND_COLS.enabled, BRAND_COLS.price, BRAND_COLS.note, BRAND_COLS.description, BRAND_COLS.seoTitle, BRAND_COLS.seoDescription, BRAND_COLS.image, BRAND_COLS.matchWords]);
-const STATE_EDITABLE = new Set<string>([STATE_COLS.brandKey, STATE_COLS.state, STATE_COLS.variant, STATE_COLS.size, STATE_COLS.mrp, STATE_COLS.note, STATE_COLS.delete]);
 const PRODUCT_EDITABLE = new Set<string>([PRODUCT_COLS.assign, PRODUCT_COLS.label]);
 
 const LIMITS = { name: 120, description: 5000, seoTitle: 120, seoDescription: 320, text: 200, maxMrp: 10_000_000 };
@@ -90,14 +91,13 @@ const YES_NO: ExcelJS.DataValidation = { type: "list", allowBlank: true, formula
 export type ExportInput = {
   brands: BrandDoc[];
   statePrices: StatePrice[];
-  products: Pick<ProductDoc, "key" | "name" | "typeName" | "typeSlug" | "isCurrent" | "sizes" | "brandKey" | "autoBrandKey" | "brandOverride" | "label">[];
+  products: Pick<ProductDoc, "key" | "state" | "name" | "typeName" | "typeSlug" | "isCurrent" | "sizes" | "brandKey" | "autoBrandKey" | "brandOverride" | "label">[];
 };
 
 export async function buildWorkbook({ brands, statePrices, products }: ExportInput): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Liquor Price Index";
   wb.created = new Date();
-  const brandNames = new Map(brands.map((b) => [b.key, b.name]));
   const productCount = new Map<string, number>();
   for (const p of products) if (p.brandKey) productCount.set(p.brandKey, (productCount.get(p.brandKey) ?? 0) + 1);
 
@@ -118,10 +118,11 @@ export async function buildWorkbook({ brands, statePrices, products }: ExportInp
     ["Description / SEO title / SEO description / Image path: optional content for the brand page."],
     ["Renaming a brand keeps its page URL. Category cannot be changed for an existing brand."],
     [""],
-    ["State prices sheet: prices you add by hand for any state", true],
-    ["Add a price: new row with Brand key (copy it from the Brands sheet), State (e.g. Haryana), Variant, Size (e.g. 750 ml) and MRP. Leave the Price ID blank."],
-    ["Change a price: edit the row. Remove a price: type 'yes' in Delete."],
-    ["Each brand page shows one price table per state that has prices. Delhi prices come from the excise department automatically."],
+    ["Prices by state sheet: one row per brand + variant + size, one column per state", true],
+    ["Grey cells are official prices from the Delhi excise list and can't be changed here. Yellow cells are yours: type a price, or clear it to remove it."],
+    ["Add a state: add a new column and type the state name as its header (e.g. Haryana, Uttar Pradesh, Maharashtra). Then fill in prices."],
+    ["Brands without official prices get starter rows (180/375/750 ml; beer 330/500/650 ml). Change Variant/Size, or add rows: copy the Brand key, then type Variant and Size."],
+    ["Each brand page shows a state-wise table and one price list per state that has prices."],
     [""],
     ["Delhi products sheet: official products from the Delhi excise list", true],
     ["Products are matched to brands automatically by name. To fix a match, type a brand key in 'Assign to brand', or 'none' to leave the product out."],
@@ -170,29 +171,8 @@ export async function buildWorkbook({ brands, statePrices, products }: ExportInp
     [BRAND_COLS.url]: 34,
   });
 
-  // --- State prices ---
-  const sws = wb.addWorksheet("State prices");
-  sws.columns = Object.values(STATE_COLS).map((h) => ({ header: h, key: h }));
-  const sorted = [...statePrices].sort((a, b) => a.brandKey.localeCompare(b.brandKey) || a.state.localeCompare(b.state) || (a.ml ?? 0) - (b.ml ?? 0));
-  for (const p of sorted) {
-    const row = sws.addRow({
-      [STATE_COLS.id]: p.id,
-      [STATE_COLS.brandKey]: p.brandKey,
-      [STATE_COLS.brand]: brandNames.get(p.brandKey) ?? "",
-      [STATE_COLS.state]: stateName(p.state),
-      [STATE_COLS.variant]: p.variant,
-      [STATE_COLS.size]: p.size,
-      [STATE_COLS.mrp]: p.mrp,
-      [STATE_COLS.note]: p.note,
-      [STATE_COLS.delete]: "",
-    });
-    fillEditable(row, STATE_EDITABLE);
-    row.getCell(STATE_COLS.delete).dataValidation = YES_NO;
-  }
-  // A few blank, pre-coloured rows invite new entries.
-  for (let i = 0; i < 20; i++) fillEditable(sws.addRow({}), STATE_EDITABLE);
-  styleSheet(sws, STATE_EDITABLE, { [STATE_COLS.id]: 22, [STATE_COLS.brandKey]: 28, [STATE_COLS.brand]: 24, [STATE_COLS.state]: 18, [STATE_COLS.variant]: 30, [STATE_COLS.note]: 30, [STATE_COLS.delete]: 9 });
-  sws.getColumn(STATE_COLS.mrp).numFmt = "#,##0";
+  // --- Prices by state (one column per state) ---
+  addPriceGridSheet(wb, { brands, products, statePrices });
 
   // --- Delhi products ---
   const pws = wb.addWorksheet("Delhi products");
@@ -244,7 +224,7 @@ export type ImportPlan = {
 export type ImportContext = {
   brands: BrandDoc[];
   statePrices: StatePrice[];
-  products: Pick<ProductDoc, "key" | "name" | "brandOverride" | "label">[];
+  products: (GridProduct & Pick<ProductDoc, "brandOverride">)[];
 };
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -312,7 +292,11 @@ function priceFields(text: string, noteCell: string | undefined) {
   };
 }
 
-export async function planImport(file: ArrayBuffer, ctx: ImportContext): Promise<ImportPlan> {
+/**
+ * opts.fullList: the uploaded brands are the complete list. Brands in the file are
+ * switched on (unless their Enabled cell says "no"); every other brand is switched off.
+ */
+export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { fullList?: boolean } = {}): Promise<ImportPlan> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(Buffer.from(file) as unknown as ExcelJS.Buffer);
 
@@ -361,6 +345,23 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext): Promise
     if (isNew) newBrands.set(key, w);
   };
 
+  // Brands named in the file (for the "full list" option).
+  const listed = new Set<string>();
+  const applyFullList = () => {
+    if (!opts.fullList) return;
+    if (!listed.size) {
+      plan.errors.push({ sheet: "-", row: 0, message: "“Full brand list” needs a Brands sheet (or a brand list) with at least one brand." });
+      return;
+    }
+    let off = 0;
+    for (const b of ctx.brands) {
+      if (listed.has(b.key) || !b.enabled) continue;
+      queueBrand(b.key, false, { enabled: false }, "Brands", 0);
+      off++;
+    }
+    if (off) plan.warnings.push({ sheet: "Brands", row: 0, message: `${off} brand${off === 1 ? " is" : "s are"} not in this file and will be switched off.` });
+  };
+
   const brandsWs = wb.getWorksheet("Brands");
   const listSheets = brandsWs ? [] : wb.worksheets.filter((ws) => categoryForSheet(ws.name) && headerMap(ws).has("brand"));
 
@@ -381,20 +382,23 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext): Promise
         const slug = slugify(name);
         if (!slug) return void plan.errors.push({ sheet: ws.name, row: r, message: `Brand name "${name}" has no letters or numbers.` });
         const key = `${cat.slug}/${slug}`;
+        listed.add(key);
         const price = priceCol ? priceFields(cellText(row.getCell(priceCol).value), undefined) : undefined;
         if (brandByKey.has(key)) {
-          // Existing brand: only refresh the price range (never touches enabled/content).
-          if (price && (price.priceText || price.priceNote)) queueBrand(key, false, price, ws.name, r);
+          // Existing brand: refresh the price range; with "full list", also switch it on.
+          const set: Partial<BrandDoc> = { ...(price && (price.priceText || price.priceNote) ? price : {}), ...(opts.fullList ? { enabled: true } : {}) };
+          if (Object.keys(set).length) queueBrand(key, false, set, ws.name, r);
         } else {
           queueBrand(key, true, { key, category: cat.slug, slug, name, enabled: true, matchWords: [], image: null, createdAt: now, ...(price ?? { priceText: "", priceMin: null, priceMax: null, priceNote: "" }) }, ws.name, r);
         }
       });
     }
+    applyFullList();
     return plan;
   }
 
-  if (!brandsWs && !wb.getWorksheet("State prices") && !wb.getWorksheet("Delhi products")) {
-    plan.errors.push({ sheet: "-", row: 0, message: 'No "Brands", "State prices" or "Delhi products" sheet, and no brand-list sheets (e.g. "Whiskies" with a "Brand" column). Start from a file downloaded from /admin.' });
+  if (!brandsWs && !wb.getWorksheet(GRID_SHEET) && !wb.getWorksheet("State prices") && !wb.getWorksheet("Delhi products")) {
+    plan.errors.push({ sheet: "-", row: 0, message: `No "Brands", "${GRID_SHEET}" or "Delhi products" sheet, and no brand-list sheets (e.g. "Whiskies" with a "Brand" column). Start from a file downloaded from /admin.` });
     return plan;
   }
 
@@ -427,6 +431,7 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext): Promise
         const enabled = parseYesNo(get(BRAND_COLS.enabled) ?? "");
         if (enabled === null) return void err(`Enabled must be "yes" or "no" (got "${get(BRAND_COLS.enabled)}").`);
         if (enabled !== undefined) set.enabled = enabled;
+        else if (opts.fullList) set.enabled = true; // in the full list and not marked "no" -> show it
 
         const priceCell = get(BRAND_COLS.price);
         if (priceCell !== undefined) Object.assign(set, priceFields(priceCell, get(BRAND_COLS.note)));
@@ -454,6 +459,7 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext): Promise
         if (words !== undefined) set.matchWords = words.split(/[,;\n]/).map((w) => w.trim()).filter(Boolean);
 
         if (existing) {
+          listed.add(existing.key);
           const cat = catText ? categoryFromText(catText) : undefined;
           if (catText && cat?.slug !== existing.category) plan.warnings.push({ sheet: "Brands", row: r, message: `Category can't be changed for an existing brand (it is part of the URL); kept "${existing.category}".` });
           queueBrand(existing.key, false, set, "Brands", r);
@@ -463,6 +469,7 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext): Promise
           const slug = slugify(name);
           if (!slug) return void err(`Brand name "${name}" has no letters or numbers.`);
           const newKey = `${cat.slug}/${slug}`;
+          listed.add(newKey);
           if (brandByKey.has(newKey)) {
             plan.warnings.push({ sheet: "Brands", row: r, message: `"${name}" already exists as ${newKey}; this row updates it.` });
             queueBrand(newKey, false, set, "Brands", r);
@@ -474,8 +481,25 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext): Promise
     }
   }
 
+  if (brandsWs) applyFullList();
+  else if (opts.fullList) plan.errors.push({ sheet: "-", row: 0, message: "“Full brand list” needs a Brands sheet in the file." });
+
   const brandExists = (key: string) => brandByKey.has(key) || newBrands.has(key);
   const nameOf = (key: string) => brandByKey.get(key)?.name ?? (newBrands.get(key)?.set.name as string) ?? key;
+
+  // ---------- Prices by state sheet (one column per state)
+  const gws = wb.getWorksheet(GRID_SHEET);
+  if (gws) {
+    const names = new Map<string, string>([...ctx.brands.map((b) => [b.key, b.name] as [string, string]), ...[...newBrands.values()].map((w) => [w.key, w.set.name as string] as [string, string])]);
+    const grid = planPriceGrid(gws, { brands: names, products: ctx.products, statePrices: ctx.statePrices });
+    plan.rows.statePrices += grid.rows;
+    plan.priceCreates.push(...grid.creates);
+    plan.priceUpdates.push(...grid.updates);
+    plan.priceDeletes.push(...grid.deletes);
+    plan.changes.push(...grid.changes);
+    plan.errors.push(...grid.errors);
+    plan.warnings.push(...grid.warnings);
+  }
 
   // ---------- State prices sheet
   const sws = wb.getWorksheet("State prices");

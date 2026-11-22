@@ -18,7 +18,7 @@ export async function GET(request: Request) {
       .collection<ProductDoc>(COLLECTIONS.products)
       .find(
         { typeSlug: { $in: CATEGORIES.flatMap((c) => c.exciseTypes) } },
-        { projection: { _id: 0, key: 1, name: 1, typeName: 1, typeSlug: 1, isCurrent: 1, brandKey: 1, autoBrandKey: 1, brandOverride: 1, label: 1, "sizes.label": 1, "sizes.mrp": 1, "sizes.isCurrent": 1 } },
+        { projection: { _id: 0, key: 1, state: 1, name: 1, typeName: 1, typeSlug: 1, isCurrent: 1, brandKey: 1, autoBrandKey: 1, brandOverride: 1, label: 1, "sizes.label": 1, "sizes.ml": 1, "sizes.mrp": 1, "sizes.isCurrent": 1 } },
       )
       .toArray(),
   ]);

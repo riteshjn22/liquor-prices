@@ -82,12 +82,16 @@ doesn't belong to one of your brands never appears on the site.
 | Sheet | What you can do |
 |---|---|
 | **Brands** | Add a brand (new row with Category + Brand name, Key left blank), rename, **Enabled** yes/no, **Price range in India** (e.g. `₹700 – ₹950`), Price note, Description, SEO title / description, Image path, **Match words** (extra names to find the brand in the Delhi list, e.g. `mc dowells`) |
-| **State prices** | Add prices for any state: Brand key (e.g. `rum/old-monk`), **State**, Variant, Size, **MRP**, Note. Leave Price ID blank for new rows; type `yes` in **Delete** to remove one |
+| **Prices by state** | One row per brand + variant + size, **one column per state**. Delhi is pre-filled with the official price (grey, can't be changed here); where Delhi is blank you can type your own. **Add a state:** add a column and name it after the state (e.g. `Haryana`), then type prices. Clear a cell to remove that price. Brands without official prices get starter rows (180/375/750 ml; beer 330/500/650 ml); add rows for other variants/sizes with the Brand key, Variant and Size |
 | **Delhi products** | See which official Delhi product is linked to which brand. **Assign to brand** fixes a match (a brand key, or `none` to leave it out); **Variant name** changes the name shown |
 | Read me | Instructions |
 
 **Upload** the file, check the **preview** of every change, then press **Apply**.
-- Any error (unknown state, bad price, unknown key…) blocks the whole upload, with its sheet and row number. Nothing is half-saved.
+- Tick **“Full brand list”** to make the file your master list: brands in the file are switched on (unless marked `no`),
+  and every other brand is switched off.
+- Any error (bad price, unknown key, missing size…) blocks the whole upload, with its sheet and row number. Nothing is half-saved.
+  A column that isn't a state name is ignored with a warning; use full names like `Uttar Pradesh`.
+- Older exports with a one-row-per-price **State prices** sheet are still accepted.
 - Rows you delete from the file are left unchanged on the site.
 - The upload also accepts a **plain brand list**: sheets named after categories (`Whiskies`, `Beers`, `Wines`, `Vodkas`, `Rums`, `Brandies`)
   with a `Brand` column and a price column. Missing brands are created; existing ones get their price range refreshed.

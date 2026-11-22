@@ -34,6 +34,8 @@ export async function POST(request: Request) {
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");
   const mode = form?.get("mode") === "apply" ? "apply" : "preview";
+  // "Full brand list": brands not in the file are switched off.
+  const fullList = form?.get("fullList") === "1";
   if (!(file instanceof File)) return Response.json({ error: "Choose an .xlsx file to upload." }, { status: 400 });
   if (!/\.xlsx$/i.test(file.name)) return Response.json({ error: "Only .xlsx files are supported (Excel > Save As > Excel Workbook)." }, { status: 400 });
   if (file.size > MAX_BYTES) return Response.json({ error: "File is larger than 4 MB. Delete rows you did not change and try again." }, { status: 413 });
@@ -43,13 +45,16 @@ export async function POST(request: Request) {
   const [brands, statePrices, products] = await Promise.all([
     db.collection<BrandDoc>(COLLECTIONS.brands).find({}, { projection: { _id: 0 } }).toArray(),
     db.collection<StatePrice>(COLLECTIONS.statePrices).find({}, { projection: { _id: 0 } }).toArray(),
-    db.collection<ProductDoc>(COLLECTIONS.products).find({}, { projection: { _id: 0, key: 1, name: 1, brandOverride: 1, label: 1 } }).toArray(),
+    db
+      .collection<ProductDoc>(COLLECTIONS.products)
+      .find({}, { projection: { _id: 0, key: 1, state: 1, name: 1, brandKey: 1, isCurrent: 1, brandOverride: 1, label: 1, "sizes.ml": 1, "sizes.mrp": 1, "sizes.isCurrent": 1 } })
+      .toArray(),
   ]);
   const ctx: ImportContext = { brands: brands as BrandDoc[], statePrices: statePrices as StatePrice[], products: products as unknown as ImportContext["products"] };
 
   let plan;
   try {
-    plan = await planImport(await file.arrayBuffer(), ctx);
+    plan = await planImport(await file.arrayBuffer(), ctx, { fullList });
   } catch (err) {
     return Response.json({ error: `Could not read the file as Excel: ${(err as Error).message}` }, { status: 400 });
   }
@@ -59,6 +64,7 @@ export async function POST(request: Request) {
     mode,
     fileName: file.name,
     format: plan.format,
+    fullList,
     rows: plan.rows,
     newBrands: plan.brandWrites.filter((w) => w.isNew).length,
     totalChanges: plan.changes.length,
