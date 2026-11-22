@@ -12,7 +12,9 @@ You choose which brands appear: every brand can be switched on or off in the adm
 /prices                             category directory
 /prices/whisky                      A–Z list of enabled whisky brands with price ranges
 /prices/rum/old-monk                brand page: range, price table per state, FAQ, similar brands
-/admin                              password-protected: brand on/off switches, Excel export / import
+/law                                liquor laws page (content written in the admin)
+/blog, /blog/<slug>                 blog (posts written in the admin)
+/admin                              password-protected: brands, page content, FAQs, blog, Excel
 /sitemap.xml  /robots.txt
 ```
 
@@ -78,15 +80,32 @@ most variants on the current Delhi list.
 New brands start enabled. Delhi products are only ever shown inside a brand page, so a product that
 doesn't belong to one of your brands never appears on the site.
 
+### Content, FAQs and blog
+
+The admin has tabs: **Brands · Pages · FAQs · Blog · Excel**. All text is written in a rich-text editor
+(headings, bold, lists, links, images, or raw HTML), and everything is **sanitized** before it is saved:
+scripts, styles, event handlers and `javascript:` links are stripped.
+
+| Where | What |
+|---|---|
+| Brands → **✎ Edit content** | Content block shown above “Price State-wise” on the brand page (also the Excel *Description* column) |
+| **Pages** | `/prices` About section (hidden until written), each category's About section (default text until written), the `/law` page (heading + content; “coming soon” and `noindex` until written). Also in the Excel *Page content* sheet |
+| **FAQs** | Pick any page (home, prices, categories, brands, law, blog, blog posts) and add / reorder / delete questions. Pages without FAQs show none; there are no automatic FAQs |
+| **Blog** | Create, edit, publish/unpublish and delete posts at `/blog/<slug>`, with excerpt, cover image (ImageKit path or https URL), SEO title/description and publish date. Drafts are hidden (404) |
+
+**Price ranges** on brand pages and category lists run from the lowest to the highest price in the brand's
+state-wise table (official prices and prices added in Excel). Your Excel “Price range in India” is shown only
+for brands with no table prices yet.
 ### Excel
 
 **Download Excel** gives one file with four sheets. Edit the **yellow** columns only:
 
 | Sheet | What you can do |
 |---|---|
-| **Brands** | Add a brand (new row with Category + Brand name, Key left blank), rename, **Enabled** yes/no, **Price range in India** (e.g. `₹700 – ₹950`), Price note, Description, SEO title / description, Image path, **Match words** (extra names to find the brand in the Delhi list, e.g. `mc dowells`) |
+| **Brands** | Add a brand (new row with Category + Brand name, Key left blank), rename, **Enabled** yes/no, **Popular** yes/no, **Price range in India** (e.g. `₹700 – ₹950`), Price note, **Description** (content above the price table: plain text or HTML), SEO title / description, Image path, **Match words** (extra names to find the brand in the Delhi list, e.g. `mc dowells`) |
 | **Prices by state** | One row per brand + variant + size, **one column per state**. Delhi is pre-filled with the official price (grey, can't be changed here); where Delhi is blank you can type your own. **Add a state:** add a column and name it after the state (e.g. `Haryana`), then type prices. Clear a cell to remove that price. Brands without official prices get starter rows (180/375/750 ml; beer 330/500/650 ml); add rows for other variants/sizes with the Brand key, Variant and Size |
 | **Delhi products** | See which official Delhi product is linked to which brand. **Assign to brand** fixes a match (a brand key, or `none` to leave it out); **Variant name** changes the name shown |
+| **Page content** | The About sections and the law page: plain text (blank line = new paragraph) or HTML |
 | Read me | Instructions |
 
 **Upload** the file, check the **preview** of every change, then press **Apply**.
@@ -192,7 +211,7 @@ Brand page = brand + its Delhi products (official table) + state prices (one tab
 - `src/lib/brand-match.ts`: product → brand matching, variant names, price-range parsing.
 - If the source returns fewer than 1,000 rows, the sync aborts and keeps the existing data.
 
-**Collections:** `brands`, `products`, `state_prices`, `price_changes`, `sync_runs`, `imports`.
+**Collections:** `brands`, `products`, `state_prices`, `price_changes`, `sync_runs`, `imports`, `page_content`, `faqs`, `posts`.
 
 ### Rendering and SEO
 

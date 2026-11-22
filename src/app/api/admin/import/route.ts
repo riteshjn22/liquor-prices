@@ -5,7 +5,7 @@ import { assignBrands } from "@/lib/brand-match";
 import { PRICES_TAG } from "@/lib/config";
 import { planImport, type ImportContext } from "@/lib/excel";
 import { COLLECTIONS, ensureIndexes, getDb } from "@/lib/mongodb";
-import type { BrandDoc, ProductDoc, StatePrice } from "@/lib/types";
+import type { BrandDoc, PageContent, ProductDoc, StatePrice } from "@/lib/types";
 
 export const maxDuration = 60;
 
@@ -42,15 +42,16 @@ export async function POST(request: Request) {
 
   const db = await getDb();
   await ensureIndexes(db);
-  const [brands, statePrices, products] = await Promise.all([
+  const [brands, statePrices, products, pageContent] = await Promise.all([
     db.collection<BrandDoc>(COLLECTIONS.brands).find({}, { projection: { _id: 0 } }).toArray(),
     db.collection<StatePrice>(COLLECTIONS.statePrices).find({}, { projection: { _id: 0 } }).toArray(),
     db
       .collection<ProductDoc>(COLLECTIONS.products)
       .find({}, { projection: { _id: 0, key: 1, state: 1, name: 1, brandKey: 1, isCurrent: 1, brandOverride: 1, label: 1, "sizes.ml": 1, "sizes.mrp": 1, "sizes.isCurrent": 1 } })
       .toArray(),
+    db.collection<PageContent>(COLLECTIONS.pageContent).find({}, { projection: { _id: 0 } }).toArray(),
   ]);
-  const ctx: ImportContext = { brands: brands as BrandDoc[], statePrices: statePrices as StatePrice[], products: products as unknown as ImportContext["products"] };
+  const ctx: ImportContext = { brands: brands as BrandDoc[], statePrices: statePrices as StatePrice[], products: products as unknown as ImportContext["products"], pageContent: pageContent as PageContent[] };
 
   let plan;
   try {
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
     return Response.json({ error: `Could not read the file as Excel: ${(err as Error).message}` }, { status: 400 });
   }
 
-  const writes = plan.brandWrites.length + plan.priceCreates.length + plan.priceUpdates.length + plan.priceDeletes.length + plan.productWrites.length;
+  const writes = plan.brandWrites.length + plan.priceCreates.length + plan.priceUpdates.length + plan.priceDeletes.length + plan.productWrites.length + plan.pageWrites.length;
   const summary = {
     mode,
     fileName: file.name,
@@ -107,6 +108,11 @@ export async function POST(request: Request) {
     await db
       .collection<ProductDoc>(COLLECTIONS.products)
       .bulkWrite(plan.productWrites.map((w) => ({ updateOne: { filter: { key: w.key }, update: { $set: w.set } } })), { ordered: false });
+  }
+  for (const p of plan.pageWrites) {
+    const pages = db.collection<PageContent>(COLLECTIONS.pageContent);
+    if (!p.html && !p.title) await pages.deleteOne({ key: p.key });
+    else await pages.updateOne({ key: p.key }, { $set: { key: p.key, html: p.html, title: p.title, updatedAt: now } }, { upsert: true });
   }
   // New brands, renamed brands, match words or manual assignments can all change which products belong where.
   const match = await assignBrands(db);

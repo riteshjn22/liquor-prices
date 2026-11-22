@@ -1,8 +1,8 @@
-import { BrandCards, CategoryTiles, ChangesList, SectionTitle } from "@/components/Blocks";
-import { getCategorySummaries, getPopularBrands, getRecentChanges, getSiteStats } from "@/lib/data";
+import { BrandCards, CategoryTiles, ChangesList, Faq, SectionTitle } from "@/components/Blocks";
+import { getCategorySummaries, getFaqs, getPopularBrands, getRecentChanges, getSiteStats } from "@/lib/data";
 
 export default async function HomePage() {
-  const [categories, popular, changes, stats] = await Promise.all([getCategorySummaries(), getPopularBrands(12), getRecentChanges(6), getSiteStats()]);
+  const [categories, popular, changes, stats, faqs] = await Promise.all([getCategorySummaries(), getPopularBrands(12), getRecentChanges(6), getSiteStats(), getFaqs("home")]);
 
   return (
     <div>
@@ -33,6 +33,8 @@ export default async function HomePage() {
           <ChangesList changes={changes} />
         </div>
       </section>
+
+      <Faq items={faqs} />
     </div>
   );
 }

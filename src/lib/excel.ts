@@ -6,7 +6,9 @@ import { SITE_URL } from "./config";
 import { parseMeasureMl, slugify } from "./normalize";
 import { addPriceGridSheet, GRID_SHEET, planPriceGrid, type GridProduct } from "./price-grid";
 import { findState, stateName } from "./states";
-import type { BrandDoc, ProductDoc, StatePrice } from "./types";
+import { contentSlots } from "./pages";
+import { toSafeHtml } from "./rich-text";
+import type { BrandDoc, PageContent, ProductDoc, StatePrice } from "./types";
 
 /*
  * Excel round-trip for the admin.
@@ -61,7 +63,7 @@ export const PRODUCT_COLS = {
 const BRAND_EDITABLE = new Set<string>([BRAND_COLS.category, BRAND_COLS.name, BRAND_COLS.enabled, BRAND_COLS.popular, BRAND_COLS.price, BRAND_COLS.note, BRAND_COLS.description, BRAND_COLS.seoTitle, BRAND_COLS.seoDescription, BRAND_COLS.image, BRAND_COLS.matchWords]);
 const PRODUCT_EDITABLE = new Set<string>([PRODUCT_COLS.assign, PRODUCT_COLS.label]);
 
-const LIMITS = { name: 120, description: 5000, seoTitle: 120, seoDescription: 320, text: 200, maxMrp: 10_000_000 };
+const LIMITS = { name: 120, description: 32_000, seoTitle: 120, seoDescription: 320, text: 200, maxMrp: 10_000_000 };
 
 const FILL_READONLY: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2E8F0" } };
 const FILL_EDIT_HEADER: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDE68A" } };
@@ -89,13 +91,17 @@ function fillEditable(row: ExcelJS.Row, editable: Set<string>) {
 
 const YES_NO: ExcelJS.DataValidation = { type: "list", allowBlank: true, formulae: ['"yes,no"'] };
 
+export const PAGE_SHEET = "Page content";
+export const PAGE_COLS = { key: "Page key (do not edit)", page: "Page", title: "Page heading", content: "Content (text or HTML)" } as const;
+
 export type ExportInput = {
+  pageContent?: PageContent[];
   brands: BrandDoc[];
   statePrices: StatePrice[];
   products: Pick<ProductDoc, "key" | "state" | "name" | "typeName" | "typeSlug" | "isCurrent" | "sizes" | "brandKey" | "autoBrandKey" | "brandOverride" | "label">[];
 };
 
-export async function buildWorkbook({ brands, statePrices, products }: ExportInput): Promise<Buffer> {
+export async function buildWorkbook({ brands, statePrices, products, pageContent }: ExportInput): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Liquor Price Index";
   wb.created = new Date();
@@ -117,7 +123,8 @@ export async function buildWorkbook({ brands, statePrices, products }: ExportInp
     ["Popular: 'yes' puts the brand in Popular Brands on the home page (up to 12, A-Z). If no brand is marked, the home page picks them automatically."],
     ["Price range in India: e.g. ₹700 – ₹950. Shown as an approximate range. Price note: optional short note, e.g. 'Varietal'."],
     ["Match words: extra names used to find this brand in the Delhi excise list, comma-separated, e.g. 'mc dowells, mcdowell no 1'."],
-    ["Description / SEO title / SEO description / Image path: optional content for the brand page."],
+    ["Description: the content shown above the price table on the brand page. Plain text (blank line = new paragraph) or HTML from the admin editor."],
+    ["SEO title / SEO description / Image path: optional extras for the brand page."],
     ["Renaming a brand keeps its page URL. Category cannot be changed for an existing brand."],
     [""],
     ["Prices by state sheet: one row per brand + variant + size, one column per state", true],
@@ -179,6 +186,23 @@ export async function buildWorkbook({ brands, statePrices, products }: ExportInp
   // --- Prices by state (one column per state) ---
   addPriceGridSheet(wb, { brands, products, statePrices });
 
+  // --- Page content (About sections, law page) ---
+  const cws = wb.addWorksheet(PAGE_SHEET);
+  cws.columns = Object.values(PAGE_COLS).map((h) => ({ header: h, key: h }));
+  const byKey = new Map((pageContent ?? []).map((p) => [p.key, p]));
+  for (const s of contentSlots()) {
+    const row = cws.addRow({
+      [PAGE_COLS.key]: s.key,
+      [PAGE_COLS.page]: `${s.label} (${s.url})`,
+      [PAGE_COLS.title]: s.hasTitle ? byKey.get(s.key)?.title ?? "" : "",
+      [PAGE_COLS.content]: byKey.get(s.key)?.html ?? "",
+    });
+    row.getCell(PAGE_COLS.content).fill = FILL_EDIT_CELL;
+    if (s.hasTitle) row.getCell(PAGE_COLS.title).fill = FILL_EDIT_CELL;
+    row.getCell(PAGE_COLS.content).alignment = { wrapText: true, vertical: "top" };
+  }
+  styleSheet(cws, new Set<string>([PAGE_COLS.title, PAGE_COLS.content]), { [PAGE_COLS.key]: 26, [PAGE_COLS.page]: 40, [PAGE_COLS.title]: 28, [PAGE_COLS.content]: 90 });
+
   // --- Delhi products ---
   const pws = wb.addWorksheet("Delhi products");
   pws.columns = Object.values(PRODUCT_COLS).map((h) => ({ header: h, key: h }));
@@ -215,7 +239,7 @@ export type ImportChange = { key: string; brand: string; field: string; from: st
 export type BrandWrite = { key: string; isNew: boolean; set: Partial<BrandDoc> };
 export type ImportPlan = {
   format: "workbook" | "brand-list";
-  rows: { brands: number; statePrices: number; products: number };
+  rows: { brands: number; statePrices: number; products: number; pages: number };
   changes: ImportChange[];
   errors: ImportIssue[];
   warnings: ImportIssue[];
@@ -224,12 +248,15 @@ export type ImportPlan = {
   priceUpdates: { id: string; set: Partial<StatePrice> }[];
   priceDeletes: string[];
   productWrites: { key: string; set: Pick<ProductDoc, "brandOverride" | "label"> }[];
+  /** Page sections to save (empty html + title removes it). */
+  pageWrites: { key: string; html: string; title: string }[];
 };
 
 export type ImportContext = {
   brands: BrandDoc[];
   statePrices: StatePrice[];
   products: (GridProduct & Pick<ProductDoc, "brandOverride">)[];
+  pageContent: PageContent[];
 };
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -308,7 +335,7 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
 
   const plan: ImportPlan = {
     format: "workbook",
-    rows: { brands: 0, statePrices: 0, products: 0 },
+    rows: { brands: 0, statePrices: 0, products: 0, pages: 0 },
     changes: [],
     errors: [],
     warnings: [],
@@ -317,6 +344,7 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
     priceUpdates: [],
     priceDeletes: [],
     productWrites: [],
+    pageWrites: [],
   };
   const brandByKey = new Map(ctx.brands.map((b) => [b.key, b]));
   // Brand keys created earlier in this same upload can be used by the State prices sheet.
@@ -457,7 +485,8 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
           const v = get(colName);
           if (v === undefined) continue;
           if (v.length > limit) return void err(`${colName} is over ${limit} characters.`);
-          set[field] = v || undefined;
+          // Description is the rich content above the price table: plain text or HTML, always sanitized.
+          set[field] = (field === "description" ? toSafeHtml(v) : v) || undefined;
         }
         const seoTitle = get(BRAND_COLS.seoTitle);
         if (seoTitle && seoTitle.length > 60) plan.warnings.push({ sheet: "Brands", row: r, message: `SEO title is ${seoTitle.length} characters; Google usually cuts titles after about 60.` });
@@ -574,6 +603,36 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
           plan.priceCreates.push({ id: randomUUID(), ...data, updatedAt: now });
           plan.changes.push({ key: brandKey, brand: nameOf(brandKey), field: `New ${state.name} price`, from: "", to: `${variant} ${size} ₹${mrp}`.trim() });
         }
+      });
+    }
+  }
+
+  // ---------- Page content sheet (About sections, law page)
+  const cws = wb.getWorksheet(PAGE_SHEET);
+  if (cws) {
+    const h = headerMap(cws);
+    const keyCol = h.get(PAGE_COLS.key.toLowerCase());
+    const contentCol = h.get(PAGE_COLS.content.toLowerCase());
+    const titleCol = h.get(PAGE_COLS.title.toLowerCase());
+    const current = new Map(ctx.pageContent.map((p) => [p.key, p]));
+    const slots = new Map(contentSlots().map((s) => [s.key, s]));
+    if (!keyCol || !contentCol) plan.errors.push({ sheet: PAGE_SHEET, row: 1, message: `The sheet needs the "${PAGE_COLS.key}" and "${PAGE_COLS.content}" columns.` });
+    else {
+      cws.eachRow((row, r) => {
+        if (r === 1) return;
+        const key = cellText(row.getCell(keyCol).value);
+        if (!key) return;
+        plan.rows.pages++;
+        const slot = slots.get(key);
+        if (!slot) return void plan.errors.push({ sheet: PAGE_SHEET, row: r, message: `Unknown page key "${key}".` });
+        const raw = cellText(row.getCell(contentCol).value);
+        if (raw.length > LIMITS.description) return void plan.errors.push({ sheet: PAGE_SHEET, row: r, message: `Content is over ${LIMITS.description} characters.` });
+        const html = toSafeHtml(raw);
+        const title = slot.hasTitle && titleCol ? cellText(row.getCell(titleCol).value).slice(0, 150) : current.get(key)?.title ?? "";
+        const before = current.get(key);
+        if ((before?.html ?? "") === html && (before?.title ?? "") === title) return;
+        plan.pageWrites.push({ key, html, title });
+        plan.changes.push({ key, brand: slot.label, field: "Page content", from: show(before?.html ? "(written)" : ""), to: html ? show(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()) : "(cleared: default shown)" });
       });
     }
   }

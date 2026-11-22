@@ -11,27 +11,23 @@ export function brandHref(b: { key: string }) {
   return `/prices/${b.key}`;
 }
 
-/** Headline price for a brand: your approximate range, else the official range, else "pending". */
+/**
+ * Headline price for a brand: low-high from its state-wise price table (official prices and
+ * prices added in Excel); your approximate Excel range when the table is empty; else "pending".
+ */
+export function priceLabel(b: BrandSummary): { main: string; small: string; pending: boolean } {
+  if (b.tableMin !== null) return { main: formatRange(b.tableMin, b.tableMax), small: "Low to high, all sizes", pending: false };
+  if (b.priceText) return { main: b.priceText, small: b.priceNote || "Approx. price range", pending: false };
+  return { main: "Price range pending", small: b.priceNote || "Verify state-wise data", pending: true };
+}
+
 export function PriceTag({ b, align = "right" }: { b: BrandSummary; align?: "left" | "right" }) {
   const cls = align === "right" ? "text-right" : "text-left";
-  if (b.priceText)
-    return (
-      <div className={`${cls} font-extrabold text-navy`}>
-        {b.priceText}
-        <small className="block text-[11px] font-medium text-muted">{b.priceNote || "Approx. price range"}</small>
-      </div>
-    );
-  if (b.officialMin !== null)
-    return (
-      <div className={`${cls} font-extrabold text-navy`}>
-        {formatRange(b.officialMin, b.officialMax)}
-        <small className="block text-[11px] font-medium text-muted">Official MRP, all sizes</small>
-      </div>
-    );
+  const p = priceLabel(b);
   return (
-    <div className={`${cls} text-sm font-semibold text-[#697586]`}>
-      Price range pending
-      <small className="block text-[11px] font-medium text-muted">{b.priceNote || "Verify state-wise data"}</small>
+    <div className={`${cls} ${p.pending ? "text-sm font-semibold text-[#697586]" : "font-extrabold text-navy"}`}>
+      {p.main}
+      <small className="block text-[11px] font-medium text-muted">{p.small}</small>
     </div>
   );
 }
@@ -76,7 +72,7 @@ export function BrandCards({ brands }: { brands: BrandSummary[] }) {
             <span className="min-w-0">
               <span className="line-clamp-2 text-sm font-bold text-ink">{b.name}</span>
               <span className="mt-0.5 block text-sm text-muted">
-                {b.priceText || (b.officialMin !== null ? formatRange(b.officialMin, b.officialMax) : "Price pending")}
+                {priceLabel(b).pending ? "Price pending" : priceLabel(b).main}
               </span>
             </span>
           </Link>

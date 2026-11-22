@@ -3,7 +3,8 @@ import { variantLabel } from "./brand-match";
 import { CATEGORIES } from "./categories";
 import { PRICES_TAG } from "./config";
 import { COLLECTIONS, getDb } from "./mongodb";
-import type { BrandDoc, BrandPriceChange, BrandSummary, CategorySummary, PriceChange, ProductDoc, StatePrice } from "./types";
+import { isEmptyHtml } from "./rich-text";
+import type { BlogPost, BrandDoc, BrandPriceChange, BrandSummary, CategorySummary, Faq, FaqDoc, PageContent, PriceChange, ProductDoc, StatePrice } from "./types";
 
 /**
  * Every read here is cached and tagged. Pages built from them are static;
@@ -48,14 +49,21 @@ async function summarize(rows: BrandRow[]): Promise<BrandSummary[]> {
       .toArray(),
     db
       .collection<StatePrice>(COLLECTIONS.statePrices)
-      .aggregate<{ _id: string; states: string[] }>([{ $match: { brandKey: { $in: keys } } }, { $group: { _id: "$brandKey", states: { $addToSet: "$state" } } }])
+      .aggregate<{ _id: string; states: string[]; min: number; max: number }>([
+        { $match: { brandKey: { $in: keys } } },
+        { $group: { _id: "$brandKey", states: { $addToSet: "$state" }, min: { $min: "$mrp" }, max: { $max: "$mrp" } } },
+      ])
       .toArray(),
   ]);
   const ps = new Map(productStats.map((p) => [p._id, p]));
-  const ss = new Map(stateStats.map((s) => [s._id, s.states]));
+  const ss = new Map(stateStats.map((s) => [s._id, s]));
   return rows.map((r) => {
     const p = ps.get(r.key);
-    const states = new Set([...(p?.states ?? []), ...(ss.get(r.key) ?? [])]);
+    const s = ss.get(r.key);
+    const states = new Set([...(p?.states ?? []), ...(s?.states ?? [])]);
+    // Low-high across the whole state-wise table: official prices and prices added in Excel.
+    const lows = [p?.min, s?.min].filter((n): n is number => typeof n === "number");
+    const highs = [p?.max, s?.max].filter((n): n is number => typeof n === "number");
     return {
       key: r.key,
       category: r.category,
@@ -68,6 +76,8 @@ async function summarize(rows: BrandRow[]): Promise<BrandSummary[]> {
       image: r.image ?? null,
       officialMin: p?.min ?? null,
       officialMax: p?.max ?? null,
+      tableMin: lows.length ? Math.min(...lows) : null,
+      tableMax: highs.length ? Math.max(...highs) : null,
       productCount: p?.count ?? 0,
       stateCount: states.size,
     };
@@ -290,4 +300,52 @@ export async function getSitemapEntries(): Promise<SitemapEntry[]> {
   const db = await getDb();
   const rows = await db.collection<BrandDoc>(COLLECTIONS.brands).find(ENABLED, { projection: { _id: 0, category: 1, slug: 1, updatedAt: 1 } }).toArray();
   return rows as unknown as SitemapEntry[];
+}
+
+// ---------------------------------------------------------------- editable content
+
+/** An editable page section (About blocks, law page), or null when nothing has been written. */
+export async function getPageContent(key: string): Promise<PageContent | null> {
+  "use cache";
+  cached();
+  const db = await getDb();
+  const doc = (await db.collection<PageContent>(COLLECTIONS.pageContent).findOne({ key }, { projection: { _id: 0 } })) as PageContent | null;
+  return doc && !isEmptyHtml(doc.html) ? doc : null;
+}
+
+/** Admin-managed FAQs for a page, in order. Empty when none were added. */
+export async function getFaqs(page: string): Promise<Faq[]> {
+  "use cache";
+  cached();
+  const db = await getDb();
+  const doc = await db.collection<FaqDoc>(COLLECTIONS.faqs).findOne({ page }, { projection: { _id: 0, items: 1 } });
+  return (doc?.items ?? []).filter((f) => f.q?.trim() && f.a?.trim());
+}
+
+// ---------------------------------------------------------------- blog
+
+const POST_LIST_PROJECTION = { _id: 0, slug: 1, title: 1, excerpt: 1, coverImage: 1, publishedAt: 1, updatedAt: 1 } as const;
+export type PostSummary = Pick<BlogPost, "slug" | "title" | "excerpt" | "coverImage" | "publishedAt" | "updatedAt">;
+
+/** Published posts, newest first. */
+export async function getPublishedPosts(limit = 200): Promise<PostSummary[]> {
+  "use cache";
+  cached();
+  const db = await getDb();
+  const rows = await db
+    .collection<BlogPost>(COLLECTIONS.posts)
+    .find({ published: true }, { projection: POST_LIST_PROJECTION })
+    .sort({ publishedAt: -1, createdAt: -1 })
+    .limit(limit)
+    .toArray();
+  return rows as unknown as PostSummary[];
+}
+
+/** A published post, or null. */
+export async function getPost(slug: string): Promise<BlogPost | null> {
+  "use cache";
+  cached();
+  const db = await getDb();
+  const doc = (await db.collection<BlogPost>(COLLECTIONS.posts).findOne({ slug, published: true }, { projection: { _id: 0 } })) as BlogPost | null;
+  return doc ?? null;
 }

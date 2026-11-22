@@ -158,6 +158,9 @@ export type BrandSummary = Pick<BrandDoc, "key" | "category" | "slug" | "name" |
   /** Lowest / highest official MRP among this brand's listed products, if any. */
   officialMin: number | null;
   officialMax: number | null;
+  /** Lowest / highest price in the brand's state-wise table (official + prices added in Excel). */
+  tableMin: number | null;
+  tableMax: number | null;
   productCount: number;
   stateCount: number;
 };
@@ -194,4 +197,30 @@ export type SyncResult = {
   matched?: number;
   ms: number;
   error?: string;
+};
+/** Editable section of a page (admin editor / Excel "Page content" sheet). */
+export type PageContent = {
+  key: string; // e.g. "prices:about", "category:beer:about", "law:body"
+  title?: string;
+  html: string; // sanitized
+  updatedAt: string;
+};
+
+export type Faq = { q: string; a: string };
+
+/** All FAQs of one page, in display order. page: "home", "prices", "category:beer", "brand:rum/old-monk", "law", "blog", "post:<slug>". */
+export type FaqDoc = { page: string; items: Faq[]; updatedAt: string };
+
+export type BlogPost = {
+  slug: string;
+  title: string;
+  excerpt: string;
+  coverImage: string; // ImageKit path ("/blog/x.jpg") or https URL; may be empty
+  html: string; // sanitized
+  published: boolean;
+  publishedAt: string; // YYYY-MM-DD
+  seoTitle?: string;
+  seoDescription?: string;
+  createdAt: string;
+  updatedAt: string;
 };

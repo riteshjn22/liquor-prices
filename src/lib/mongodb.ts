@@ -39,6 +39,11 @@ export const COLLECTIONS = {
   priceChanges: "price_changes",
   syncRuns: "sync_runs",
   imports: "imports",
+  /** Editable page sections (About blocks, law page). */
+  pageContent: "page_content",
+  /** Admin-managed FAQs, one document per page. */
+  faqs: "faqs",
+  posts: "posts",
 } as const;
 
 let indexesReady: Promise<void> | null = null;
@@ -62,6 +67,12 @@ export function ensureIndexes(db: Db): Promise<void> {
       await db.collection(COLLECTIONS.priceChanges).createIndex({ detectedAt: -1 });
       await db.collection(COLLECTIONS.priceChanges).createIndex({ productKey: 1, detectedAt: -1 });
       await db.collection(COLLECTIONS.syncRuns).createIndex({ state: 1, startedAt: -1 });
+      await db.collection(COLLECTIONS.pageContent).createIndex({ key: 1 }, { unique: true });
+      await db.collection(COLLECTIONS.faqs).createIndex({ page: 1 }, { unique: true });
+      await db.collection(COLLECTIONS.posts).createIndexes([
+        { key: { slug: 1 }, unique: true, name: "slug_unique" },
+        { key: { published: 1, publishedAt: -1 }, name: "published_date" },
+      ]);
     })().catch((err) => {
       indexesReady = null;
       throw err;

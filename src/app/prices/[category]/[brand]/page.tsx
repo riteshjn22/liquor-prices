@@ -2,17 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { BrandCards, ChangesList, Faq, type FaqItem } from "@/components/Blocks";
+import { BrandCards, ChangesList, Faq } from "@/components/Blocks";
 import { BrandImage } from "@/components/BrandImage";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { RichText } from "@/components/RichText";
 import { StateWiseTabs, type VariantTable } from "@/components/StateWiseTabs";
 import { formatRange } from "@/lib/brand-match";
 import { getCategory } from "@/lib/categories";
 import { getStateConfig, SITE_URL } from "@/lib/config";
-import { getAllBrandParams, getBrandChanges, getBrandPage, getRelatedBrands, type BrandPage, type DisplayProduct } from "@/lib/data";
-import { formatINR } from "@/lib/format";
+import { getAllBrandParams, getBrandChanges, getBrandPage, getFaqs, getRelatedBrands, type BrandPage, type DisplayProduct } from "@/lib/data";
 import { imageKitEnabled, imageKitUrl } from "@/lib/imagekit";
 import { sizeLabel } from "@/lib/normalize";
 import { stateName } from "@/lib/states";
@@ -137,12 +137,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!page) return {};
   const { brand } = page;
   const sections = buildSections(page);
-  const range = brand.priceText || (allPrices(sections).length ? formatRange(Math.min(...allPrices(sections)), Math.max(...allPrices(sections))) : "");
+  const all = allPrices(sections);
+  // Low-high from the state-wise table; your Excel range only when the table is empty.
+  const range = all.length ? formatRange(Math.min(...all), Math.max(...all)) : brand.priceText;
   const title = brand.seoTitle || `${brand.name} Price in India${range ? `: ${range}` : ""} (All Sizes)`;
   const stateNames = sections.map((s) => s.name);
   const description =
     brand.seoDescription ||
-    `${brand.name} price in India${brand.priceText ? `: approx. ${brand.priceText}` : ""}. ${
+    `${brand.name} price in India${range ? `: ${range}` : ""}. ${
       stateNames.length ? `Prices by bottle size for ${stateNames.slice(0, 4).join(", ")}.` : "Variants and bottle sizes."
     } Official MRP where available.`;
   return {
@@ -171,9 +173,10 @@ async function BrandContent({ params }: Pick<Props, "params">) {
   const { brand } = page;
   const cat = getCategory(brand.category)!;
   const sections = buildSections(page);
-  const [related, changes] = await Promise.all([
+  const [related, changes, faqs] = await Promise.all([
     getRelatedBrands(brand.category, brand.slug, brand.priceMin, 8),
     getBrandChanges(brand.key, 8),
+    getFaqs(`brand:${brand.key}`),
   ]);
 
   const variantTables = buildVariantTables(sections, brand.name);
@@ -182,28 +185,7 @@ async function BrandContent({ params }: Pick<Props, "params">) {
   const variants = new Set([...sections.flatMap((s) => s.official.map((r) => r.variant)), ...page.statePrices.map((p) => p.variant).filter(Boolean)]);
   const lowerCat = cat.name.toLowerCase();
 
-  const faq: FaqItem[] = [];
-  faq.push({
-    q: `What is the price of ${brand.name} in India?`,
-    a: brand.priceText
-      ? `${brand.name} costs approximately ${brand.priceText} in India${brand.priceNote ? ` (${brand.priceNote})` : ""}, depending on the variant, bottle size and state.${listedRange ? ` Listed state prices on this page range from ${listedRange}.` : ""}`
-      : listedRange
-        ? `Listed prices for ${brand.name} range from ${listedRange}, depending on the variant, bottle size and state.`
-        : `We don't have a verified price for ${brand.name} yet. Prices are added as soon as reliable information is available.`,
-  });
-  for (const s of sections.slice(0, 4)) {
-    const rows = s.official.length ? s.official : s.manual.map((m) => ({ variant: m.variant, size: m.size, mrp: m.mrp, ml: m.ml ?? 0 }));
-    if (!rows.length) continue;
-    const std = rows.filter((r) => r.ml === 750);
-    const pick = (std.length ? std : rows).reduce((a, b) => (b.mrp < a.mrp ? b : a));
-    faq.push({
-      q: `What is the price of ${brand.name} in ${s.name}?`,
-      a: `${s.official.length ? `As per the ${s.source?.name ?? "state excise list"}, ` : ""}${brand.name} ${pick.variant} ${pick.size} costs ${formatINR(pick.mrp)} in ${s.name}. ${
-        rows.length > 1 ? `${rows.length} prices are listed for ${s.name}, from ${formatRange(Math.min(...rows.map((r) => r.mrp)), Math.max(...rows.map((r) => r.mrp)))}.` : ""
-      }`.trim(),
-    });
-  }
-  faq.push({ q: `Why is ${brand.name} priced differently in each state?`, a: "Each state sets its own excise duty, VAT and pricing rules, so the MRP of the same bottle varies from state to state." });
+
 
   return (
     <article>
@@ -221,9 +203,9 @@ async function BrandContent({ params }: Pick<Props, "params">) {
           <h1 className="text-[clamp(26px,3.6vw,38px)] font-extrabold leading-tight text-navy">{brand.name} Price in India</h1>
           <div className="mt-3 flex flex-wrap items-end gap-x-8 gap-y-3">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted">Approx. price range</div>
-              <div className="text-2xl font-extrabold text-navy">{brand.priceText || "Pending"}</div>
-              {brand.priceNote && <div className="text-xs text-muted">{brand.priceNote}</div>}
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted">{listedRange ? "Price range" : "Approx. price range"}</div>
+              <div className="text-2xl font-extrabold text-navy">{listedRange || brand.priceText || "Pending"}</div>
+              {!listedRange && brand.priceNote && <div className="text-xs text-muted">{brand.priceNote}</div>}
             </div>
           </div>
           <ul className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
@@ -243,15 +225,8 @@ async function BrandContent({ params }: Pick<Props, "params">) {
       </header>
 
       {brand.description && (
-        <section className="prose-lite mt-6 max-w-3xl">
-          <h2 className="text-xl font-bold">About {brand.name}</h2>
-          {brand.description
-            .split(/\n\s*\n/)
-            .map((p) => p.trim())
-            .filter(Boolean)
-            .map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
+        <section className="mt-6 max-w-3xl">
+          <RichText html={brand.description} />
         </section>
       )}
 
@@ -275,7 +250,7 @@ async function BrandContent({ params }: Pick<Props, "params">) {
         </section>
       )}
 
-      <Faq items={faq} />
+      <Faq items={faqs} />
 
       {related.length > 0 && (
         <section className="mt-10">

@@ -5,10 +5,10 @@ import { BrandRows, Faq } from "@/components/Blocks";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { JsonLd } from "@/components/JsonLd";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { RichText } from "@/components/RichText";
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { SITE_URL } from "@/lib/config";
-import { getBrandsByCategory } from "@/lib/data";
-import { formatINR } from "@/lib/format";
+import { getBrandsByCategory, getFaqs, getPageContent } from "@/lib/data";
 import type { BrandSummary } from "@/lib/types";
 
 // Crawlers always get complete HTML.
@@ -51,7 +51,7 @@ async function CategoryContent({ params }: Pick<Props, "params">) {
   const { category } = await params;
   const cat = getCategory(category);
   if (!cat) notFound();
-  const brands = await getBrandsByCategory(category);
+  const [brands, about, faqs] = await Promise.all([getBrandsByCategory(category), getPageContent(`category:${category}:about`), getFaqs(`category:${category}`)]);
   const lower = cat.name.toLowerCase();
 
   const groups = new Map<string, BrandSummary[]>();
@@ -60,9 +60,6 @@ async function CategoryContent({ params }: Pick<Props, "params">) {
     groups.set(l, [...(groups.get(l) ?? []), b]);
   }
   const letters = [...groups.keys()].sort((a, b) => (a === "#" ? -1 : b === "#" ? 1 : a.localeCompare(b)));
-  const priced = brands.filter((b) => b.priceMin !== null);
-  const cheapest = [...priced].sort((a, b) => a.priceMin! - b.priceMin!)[0];
-  const priciest = [...priced].sort((a, b) => (b.priceMax ?? b.priceMin!) - (a.priceMax ?? a.priceMin!))[0];
 
   return (
     <div>
@@ -75,8 +72,8 @@ async function CategoryContent({ params }: Pick<Props, "params">) {
         </p>
       </section>
       <div className="note mb-6">
-        <strong>Price information:</strong> ranges are approximate and can reflect differences between states and bottle sizes.
-        Brand pages show official excise MRPs where available.
+        <strong>Price information:</strong> each range runs from the lowest to the highest listed price across states and bottle
+        sizes. Open a brand for the price of each variant and size.
       </div>
 
       <section className="border-b border-line pb-7">
@@ -109,26 +106,18 @@ async function CategoryContent({ params }: Pick<Props, "params">) {
 
       <section className="card mt-6">
         <h2 className="text-xl font-bold">About {cat.name} Prices in India</h2>
-        <p className="mt-2 text-muted">
-          {cat.name} prices differ by state because of excise duties, taxes, local pricing policies and availability. Each brand
-          page lists the official MRP per bottle size for states where the excise department publishes a price list, with the
-          source and date.
-        </p>
+        {about ? (
+          // Written in the admin (Pages) or the Excel "Page content" sheet.
+          <RichText html={about.html} className="mt-2" />
+        ) : (
+          <p className="mt-2 text-muted">
+            {cat.name} prices differ by state because of excise duties, taxes, local pricing policies and availability. Each brand
+            page lists the price per bottle size for the states where we have one.
+          </p>
+        )}
       </section>
 
-      <Faq
-        items={[
-          { q: `Are ${lower} prices the same across India?`, a: `No. ${cat.name} prices differ by state because of taxes, excise policies, pricing rules and availability.` },
-          ...(cheapest
-            ? [{ q: `Which ${lower} brand is the cheapest?`, a: `Among the brands listed here, ${cheapest.name} has the lowest approximate price, from ${formatINR(cheapest.priceMin!)}.` }]
-            : []),
-          ...(priciest && priciest !== cheapest
-            ? [{ q: `Which ${lower} brand is the most expensive?`, a: `${priciest.name} has the highest approximate price, up to ${formatINR(priciest.priceMax ?? priciest.priceMin!)}.` }]
-            : []),
-          { q: "What does the price range represent?", a: "It is an approximate range across common bottle sizes and states. For exact prices, see the state tables on each brand page." },
-          { q: "Why are some prices unavailable?", a: "Some states do not publish price lists, or the brand is not sold there. Prices are added as soon as reliable information is available." },
-        ]}
-      />
+      <Faq items={faqs} />
 
       <JsonLd
         data={{

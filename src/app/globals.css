@@ -71,3 +71,57 @@ body {
 .prose-lite p {
   @apply mt-3 leading-relaxed text-muted;
 }
+
+/* Rich text written in the admin editor (brand blocks, About sections, law page, blog). */
+.rich {
+  @apply leading-relaxed text-ink;
+}
+.rich > * + * {
+  @apply mt-3;
+}
+.rich h2 {
+  @apply mt-6 text-xl font-bold text-navy;
+}
+.rich h3 {
+  @apply mt-5 text-lg font-bold text-navy;
+}
+.rich h4 {
+  @apply mt-4 font-bold text-navy;
+}
+.rich p {
+  @apply text-[#33404f];
+}
+.rich a {
+  @apply text-link underline;
+}
+.rich ul {
+  @apply list-disc pl-6;
+}
+.rich ol {
+  @apply list-decimal pl-6;
+}
+.rich li + li {
+  @apply mt-1;
+}
+.rich blockquote {
+  @apply border-l-4 border-gold bg-[#fffbeb] px-4 py-2 text-[#554719];
+}
+.rich img {
+  @apply h-auto max-w-full rounded-xl;
+}
+.rich hr {
+  @apply border-line;
+}
+.rich table {
+  @apply w-full border-collapse text-sm;
+}
+.rich th,
+.rich td {
+  @apply border border-line px-3 py-2 text-left;
+}
+.rich th {
+  @apply bg-tile font-semibold;
+}
+.rich > :first-child {
+  @apply mt-0;
+}

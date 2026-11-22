@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BlogManager } from "./admin/BlogManager";
+import { BrandContentEditor } from "./admin/BrandContentEditor";
+import { FaqManager } from "./admin/FaqManager";
+import { PagesManager } from "./admin/PagesManager";
 
 type Category = { slug: string; name: string };
 type BrandRow = { key: string; category: string; name: string; enabled: boolean; featured: boolean; priceText: string; priceNote: string; products: number; statePrices: number };
@@ -14,7 +18,7 @@ type Result = {
   mode: "preview" | "apply";
   fileName: string;
   format: "workbook" | "brand-list";
-  rows: { brands: number; statePrices: number; products: number };
+  rows: { brands: number; statePrices: number; products: number; pages?: number };
   newBrands: number;
   totalChanges: number;
   changes: Change[];
@@ -26,12 +30,51 @@ type Result = {
   error?: string;
 };
 
-export function AdminPanel({ categories }: { categories: Category[] }) {
+const TABS = [
+  { id: "brands", label: "Brands" },
+  { id: "pages", label: "Pages" },
+  { id: "faqs", label: "FAQs" },
+  { id: "blog", label: "Blog" },
+  { id: "excel", label: "Excel" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
+export function AdminPanel({ categories, faqPages }: { categories: Category[]; faqPages: { page: string; label: string; url: string }[] }) {
   const [reloadKey, setReloadKey] = useState(0);
+  const [tab, setTab] = useState<TabId>("brands");
+
+  // Open the tab named in the address (#faqs etc.), and keep it there when switching.
+  useEffect(() => {
+    const h = window.location.hash.slice(1);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the URL hash
+    if (TABS.some((t) => t.id === h)) setTab(h as TabId);
+  }, []);
+  const go = (id: TabId) => {
+    setTab(id);
+    window.history.replaceState(null, "", `#${id}`);
+  };
+
   return (
     <div className="space-y-6">
-      <BrandManager categories={categories} reloadKey={reloadKey} />
-      <ExcelSection onApplied={() => setReloadKey((k) => k + 1)} />
+      <nav role="tablist" aria-label="Admin sections" className="flex flex-wrap gap-2 border-b border-line pb-3">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            type="button"
+            aria-selected={tab === t.id}
+            onClick={() => go(t.id)}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold ${tab === t.id ? "bg-navy text-white" : "bg-white text-ink ring-1 ring-line hover:ring-link"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+      {tab === "brands" && <BrandManager categories={categories} reloadKey={reloadKey} />}
+      {tab === "pages" && <PagesManager />}
+      {tab === "faqs" && <FaqManager fixedPages={faqPages} />}
+      {tab === "blog" && <BlogManager />}
+      {tab === "excel" && <ExcelSection onApplied={() => setReloadKey((k) => k + 1)} />}
     </div>
   );
 }
@@ -61,6 +104,7 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
   const [status, setStatus] = useState<"" | "on" | "off" | "popular">("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -174,6 +218,7 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
       </div>
 
       {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
+      {editing && <BrandContentEditor key={editing} brandKey={editing} onClose={() => setEditing(null)} />}
       {!brands && !error && <p className="mt-4 text-sm text-muted">Loading brands…</p>}
       {brands && brands.length === 0 && (
         <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -247,6 +292,9 @@ function BrandManager({ categories, reloadKey }: { categories: Category[]; reloa
                       <span className="font-semibold">{b.name}</span>
                     )}
                     <span className="block text-xs text-muted">{b.key}</span>
+                    <button type="button" onClick={() => setEditing(b.key)} className="mt-0.5 text-xs font-semibold text-link hover:underline">
+                      ✎ Edit content
+                    </button>
                   </td>
                   <td className="hidden sm:table-cell">{b.category}</td>
                   <td className="hidden whitespace-nowrap md:table-cell">
@@ -373,7 +421,7 @@ function ExcelSection({ onApplied }: { onApplied: () => void }) {
               <p>
                 <b>{result.fileName}</b>
                 {result.format === "brand-list" ? " (brand list)" : ""}: read {result.rows.brands} brand rows
-                {result.format === "workbook" && `, ${result.rows.statePrices} price rows and ${result.rows.products} Delhi product rows`}.{" "}
+                {result.format === "workbook" && `, ${result.rows.statePrices} price rows, ${result.rows.products} Delhi product rows and ${result.rows.pages ?? 0} page sections`}.{" "}
                 {result.totalChanges === 0 ? (
                   <b>No changes found.</b>
                 ) : (

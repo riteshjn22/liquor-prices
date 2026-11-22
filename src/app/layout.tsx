@@ -44,6 +44,12 @@ function Header() {
               {c.name}
             </Link>
           ))}
+          <Link href="/law" className="hover:text-gold">
+            Laws
+          </Link>
+          <Link href="/blog" className="hover:text-gold">
+            Blog
+          </Link>
         </nav>
         {/* Mobile menu: no JavaScript needed */}
         <details className="relative lg:hidden">
@@ -59,6 +65,16 @@ function Header() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link href="/law" className="block rounded-lg px-2 py-2 hover:bg-tile">
+                  ⚖️ Laws
+                </Link>
+              </li>
+              <li>
+                <Link href="/blog" className="block rounded-lg px-2 py-2 hover:bg-tile">
+                  📰 Blog
+                </Link>
+              </li>
             </ul>
           </div>
         </details>
@@ -97,6 +113,16 @@ function Footer() {
               <li>
                 <Link href="/prices" className="hover:underline">
                   All liquor prices
+                </Link>
+              </li>
+              <li>
+                <Link href="/law" className="hover:underline">
+                  Liquor laws
+                </Link>
+              </li>
+              <li>
+                <Link href="/blog" className="hover:underline">
+                  Blog
                 </Link>
               </li>
               {STATES.map((s) => (

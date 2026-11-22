@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Faq } from "@/components/Blocks";
+import { RichText } from "@/components/RichText";
 import { CATEGORIES } from "@/lib/categories";
-import { getCategorySummaries } from "@/lib/data";
+import { getCategorySummaries, getFaqs, getPageContent } from "@/lib/data";
 
 export const metadata: Metadata = {
   title: "Liquor Prices in India: Whisky, Beer, Wine, Vodka, Rum, Brandy",
@@ -12,7 +13,8 @@ export const metadata: Metadata = {
 };
 
 export default async function PricesPage() {
-  const counts = new Map((await getCategorySummaries()).map((c) => [c.slug, c.brandCount]));
+  const [summaries, about, faqs] = await Promise.all([getCategorySummaries(), getPageContent("prices:about"), getFaqs("prices")]);
+  const counts = new Map(summaries.map((c) => [c.slug, c.brandCount]));
   return (
     <div>
       <Breadcrumbs items={[{ name: "Liquor Prices", href: "/prices" }]} />
@@ -45,34 +47,15 @@ export default async function PricesPage() {
         </div>
       </section>
 
-      <section className="card mt-6">
-        <h2 className="text-xl font-bold">About Liquor Price Information</h2>
-        <p className="mt-2 text-muted">
-          Liquor prices in India differ between states because of excise duties, taxes, pricing policies, availability and
-          pack sizes. Each brand page lists official prices by state where we have them, with the source and date.
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          {[
-            ["Category-wise", "Browse brands by type of drink."],
-            ["Brand & pack size", "See every variant and bottle size we have a price for."],
-            ["State & source", "Official excise MRPs are labelled with their state and date."],
-          ].map(([t, d]) => (
-            <div key={t} className="rounded-xl bg-tile p-3.5">
-              <strong className="block">{t}</strong>
-              <p className="mt-1 text-sm text-muted">{d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      {about && (
+        // Written in the admin (Pages) or the Excel "Page content" sheet; hidden until then.
+        <section className="card mt-6">
+          <h2 className="text-xl font-bold">About Liquor Price Information</h2>
+          <RichText html={about.html} className="mt-2" />
+        </section>
+      )}
 
-      <Faq
-        items={[
-          { q: "Why do liquor prices differ from state to state?", a: "Each state sets its own excise duty, taxes and pricing rules, so the same bottle can have a different MRP in different states." },
-          { q: "Are liquor prices the same for every bottle size?", a: "No. Prices vary by pack size and variant. Each brand page lists prices per size." },
-          { q: "Are the prices on this site official?", a: "Prices in the state tables marked as official come from state excise department price lists. Price ranges are indicative. Always check the MRP printed on the bottle." },
-          { q: "How often are prices updated?", a: "Prices are updated when new information from state excise departments or other reliable sources is available." },
-        ]}
-      />
+      <Faq items={faqs} />
     </div>
   );
 }

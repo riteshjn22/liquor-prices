@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AdminPanel } from "@/components/AdminPanel";
 import { CATEGORIES } from "@/lib/categories";
+import { fixedFaqPages } from "@/lib/pages";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -13,10 +14,10 @@ export default function AdminPage() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-3xl font-extrabold text-navy">Admin</h1>
       <p className="mt-2 text-muted">
-        Switch brands on or off, and manage brands and state prices with Excel. Delhi prices are not fetched automatically; they change only when you run a sync.
+        Brands, page content, FAQs, blog posts and Excel import/export. Delhi prices are not fetched automatically; they change only when you run a sync.
       </p>
       <div className="mt-6">
-        <AdminPanel categories={CATEGORIES.map((c) => ({ slug: c.slug, name: c.name }))} />
+        <AdminPanel categories={CATEGORIES.map((c) => ({ slug: c.slug, name: c.name }))} faqPages={fixedFaqPages()} />
       </div>
     </div>
   );
