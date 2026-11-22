@@ -30,26 +30,6 @@ function Wordmark({ className = "" }: { className?: string }) {
   );
 }
 
-function SearchForm({ id, className = "" }: { id: string; className?: string }) {
-  return (
-    <form action="/search" method="get" role="search" className={`flex ${className}`}>
-      <label htmlFor={id} className="sr-only">
-        Search brands
-      </label>
-      <input
-        id={id}
-        name="q"
-        type="search"
-        placeholder="Search a brand, e.g. Old Monk"
-        className="w-full rounded-l-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-slate-300 outline-none focus:bg-white focus:text-ink"
-      />
-      <button type="submit" className="rounded-r-full bg-gold px-4 text-sm font-bold text-navy hover:brightness-105">
-        Search
-      </button>
-    </form>
-  );
-}
-
 function Header() {
   return (
     <header className="bg-navy-gradient rounded-b-[22px] text-white">
@@ -65,14 +45,12 @@ function Header() {
             </Link>
           ))}
         </nav>
-        <SearchForm id="header-search" className="hidden w-64 md:flex" />
         {/* Mobile menu: no JavaScript needed */}
         <details className="relative lg:hidden">
           <summary aria-label="Menu" className="cursor-pointer list-none text-3xl leading-none tracking-widest [&::-webkit-details-marker]:hidden">
             ☰
           </summary>
           <div className="absolute right-0 z-20 mt-3 w-64 rounded-2xl border border-line bg-white p-3 text-ink shadow-xl">
-            <SearchForm id="mobile-search" className="mb-3 [&_input]:border-line [&_input]:bg-tile [&_input]:text-ink [&_input]:placeholder:text-muted" />
             <ul className="grid grid-cols-2 gap-1 text-sm font-semibold">
               {CATEGORIES.map((c) => (
                 <li key={c.slug}>

@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 
 export type VariantTable = {
   variant: string;
   sizes: { ml: number; label: string }[];
-  rows: { slug: string; name: string; official: boolean; cells: (number | null)[] }[];
+  rows: { slug: string; name: string; cells: (number | null)[] }[];
 };
 
 const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
@@ -14,9 +14,8 @@ const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR",
  * State × size price table with one tab per variant. This is the brand page's price list.
  * Every variant's table is in the server HTML (inactive ones are only hidden),
  * so search engines see all prices; tabs just switch which one is visible.
- * `children` is the source note shown under the table.
  */
-export function StateWiseTabs({ brandName, tables, children }: { brandName: string; tables: VariantTable[]; children?: ReactNode }) {
+export function StateWiseTabs({ brandName, tables }: { brandName: string; tables: VariantTable[] }) {
   const [active, setActive] = useState(0);
   const many = tables.length > 1;
 
@@ -69,11 +68,6 @@ export function StateWiseTabs({ brandName, tables, children }: { brandName: stri
                   <tr key={r.slug}>
                     <td className="sticky left-0 bg-white">
                       <span className="font-semibold text-ink">{r.name}</span>
-                      {r.official && (
-                        <span className="mt-0.5 block w-fit rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-semibold text-green-700 sm:ml-1.5 sm:mt-0 sm:inline">
-                          Official
-                        </span>
-                      )}
                     </td>
                     {r.cells.map((c, j) => (
                       <td key={t.sizes[j].ml} className="whitespace-nowrap border-l border-line text-left font-bold">
@@ -87,7 +81,6 @@ export function StateWiseTabs({ brandName, tables, children }: { brandName: stri
           </div>
         </div>
       ))}
-      {children && <p className="mt-2 space-y-0.5 text-xs text-muted">{children}</p>}
     </section>
   );
 }

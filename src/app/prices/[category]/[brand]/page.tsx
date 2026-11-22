@@ -11,8 +11,8 @@ import { StateWiseTabs, type VariantTable } from "@/components/StateWiseTabs";
 import { formatRange } from "@/lib/brand-match";
 import { getCategory } from "@/lib/categories";
 import { getStateConfig, SITE_URL } from "@/lib/config";
-import { getAllBrandParams, getBrandChanges, getBrandPage, getRelatedBrands, getSiteStats, type BrandPage, type DisplayProduct } from "@/lib/data";
-import { formatDate, formatINR, fyLabel } from "@/lib/format";
+import { getAllBrandParams, getBrandChanges, getBrandPage, getRelatedBrands, type BrandPage, type DisplayProduct } from "@/lib/data";
+import { formatINR } from "@/lib/format";
 import { imageKitEnabled, imageKitUrl } from "@/lib/imagekit";
 import { sizeLabel } from "@/lib/normalize";
 import { stateName } from "@/lib/states";
@@ -62,25 +62,24 @@ function officialRows(products: DisplayProduct[]): OfficialRow[] {
 
 function buildVariantTables(sections: StateSection[], brandName: string): VariantTable[] {
   // variant -> state -> ml -> prices
-  const byVariant = new Map<string, { label: string; states: Map<string, Map<number, number[]>>; official: Set<string> }>();
-  const add = (variant: string, state: string, ml: number | null | undefined, mrp: number, isOfficial: boolean) => {
+  const byVariant = new Map<string, { label: string; states: Map<string, Map<number, number[]>> }>();
+  const add = (variant: string, state: string, ml: number | null | undefined, mrp: number) => {
     if (!ml) return;
     const label = variant.trim() || brandName;
     const k = label.toLowerCase();
-    const v = byVariant.get(k) ?? { label, states: new Map(), official: new Set<string>() };
-    if (isOfficial) v.official.add(state);
+    const v = byVariant.get(k) ?? { label, states: new Map() };
     const sizes = v.states.get(state) ?? new Map<number, number[]>();
     sizes.set(ml, [...(sizes.get(ml) ?? []), mrp]);
     v.states.set(state, sizes);
     byVariant.set(k, v);
   };
   for (const s of sections) {
-    for (const r of s.official) add(r.variant, s.slug, r.ml, r.mrp, true);
-    for (const m of s.manual) add(m.variant, s.slug, m.ml, m.mrp, false);
+    for (const r of s.official) add(r.variant, s.slug, r.ml, r.mrp);
+    for (const m of s.manual) add(m.variant, s.slug, m.ml, m.mrp);
   }
 
   const tables: (VariantTable & { score: number })[] = [];
-  for (const { label, states, official } of byVariant.values()) {
+  for (const { label, states } of byVariant.values()) {
     // Every size this variant is sold in, small to large (this table is the only price list on the page).
     const chosen = [...new Set([...states.values()].flatMap((sizes) => [...sizes.keys()]))].sort((a, b) => a - b);
     const rows = sections
@@ -90,7 +89,6 @@ function buildVariantTables(sections: StateSection[], brandName: string): Varian
         return {
           slug: s.slug,
           name: s.name,
-          official: official.has(s.slug),
           // One price per cell: if glass and PET differ, the lower one is shown.
           cells: chosen.map((ml) => (sizes.has(ml) ? Math.min(...sizes.get(ml)!) : null)),
         };
@@ -173,10 +171,9 @@ async function BrandContent({ params }: Pick<Props, "params">) {
   const { brand } = page;
   const cat = getCategory(brand.category)!;
   const sections = buildSections(page);
-  const [related, changes, stats] = await Promise.all([
+  const [related, changes] = await Promise.all([
     getRelatedBrands(brand.category, brand.slug, brand.priceMin, 8),
     getBrandChanges(brand.key, 8),
-    getSiteStats(),
   ]);
 
   const variantTables = buildVariantTables(sections, brand.name);
@@ -259,29 +256,7 @@ async function BrandContent({ params }: Pick<Props, "params">) {
       )}
 
       {variantTables.length > 0 ? (
-        <StateWiseTabs brandName={brand.name} tables={variantTables}>
-          {sections.some((s) => s.official.length) &&
-            sections
-              .filter((s) => s.official.length)
-              .map((s) => (
-                <span key={s.slug} className="block">
-                  {s.name}: official MRP for FY {fyLabel(s.official[0].fy)} from the{" "}
-                  {s.source ? (
-                    <a href={s.source.url} rel="nofollow noopener" target="_blank" className="text-link underline">
-                      {s.source.name}
-                    </a>
-                  ) : (
-                    "state excise department"
-                  )}
-                  {stats.lastSyncedAt ? `, checked ${formatDate(stats.lastSyncedAt)}` : ""}.
-                </span>
-              ))}
-          {sections.some((s) => s.manual.length) && (
-            <span className="block">
-              {sections.some((s) => s.official.length) ? "Other prices" : "Prices"} added by our team. Check the MRP printed on the bottle.
-            </span>
-          )}
-        </StateWiseTabs>
+        <StateWiseTabs brandName={brand.name} tables={variantTables} />
       ) : (
         <section className="mt-8">
           <h2 className="text-2xl font-bold">{brand.name} Price State-wise</h2>

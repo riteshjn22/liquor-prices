@@ -11,16 +11,6 @@ export default async function HomePage() {
         <p className="mx-auto mt-2 max-w-2xl text-[17px] text-muted">
           Brand-wise prices for whisky, beer, wine, vodka, rum and brandy, with official state excise MRPs where available.
         </p>
-        <form action="/search" method="get" role="search" className="mx-auto mt-5 flex h-14 max-w-2xl items-center gap-3 rounded-full border border-[#cbd2dc] bg-[#f1f2f5] px-5">
-          <span aria-hidden className="text-xl text-muted">
-            ⌕
-          </span>
-          <label htmlFor="home-search" className="sr-only">
-            Search brands
-          </label>
-          <input id="home-search" name="q" type="search" placeholder="Search a brand, e.g. Kingfisher, Old Monk, Sula" className="w-full bg-transparent text-[17px] outline-none" />
-          <button className="rounded-full bg-navy px-4 py-2 text-sm font-bold text-white">Search</button>
-        </form>
         {stats.brandCount > 0 && <p className="mt-3 text-sm text-muted">{stats.brandCount.toLocaleString("en-IN")} brands listed</p>}
       </section>
 

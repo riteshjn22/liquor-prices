@@ -277,30 +277,3 @@ export async function getSitemapEntries(): Promise<SitemapEntry[]> {
   const rows = await db.collection<BrandDoc>(COLLECTIONS.brands).find(ENABLED, { projection: { _id: 0, category: 1, slug: 1, updatedAt: 1 } }).toArray();
   return rows as unknown as SitemapEntry[];
 }
-
-function escapeRegex(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-export async function searchBrands(query: string, limit = 48): Promise<BrandSummary[]> {
-  "use cache";
-  cacheLife("hours");
-  cacheTag(PRICES_TAG);
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6);
-  if (!words.length) return [];
-  const db = await getDb();
-  const rows = await db
-    .collection<BrandDoc>(COLLECTIONS.brands)
-    .find(
-      {
-        ...ENABLED,
-        $and: words.map((w) => ({ $or: [{ name: { $regex: escapeRegex(w), $options: "i" } }, { category: { $regex: `^${escapeRegex(w)}`, $options: "i" } }] })),
-      },
-      { projection: BRAND_PROJECTION },
-    )
-    .collation({ locale: "en" })
-    .sort({ name: 1 })
-    .limit(limit)
-    .toArray();
-  return summarize(rows as unknown as BrandRow[]);
-}
