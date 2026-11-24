@@ -19,7 +19,7 @@ type Result = {
   mode: "preview" | "apply";
   fileName: string;
   format: "workbook" | "brand-list";
-  rows: { brands: number; statePrices: number; products: number; pages?: number };
+  rows: { brands: number; statePrices: number; products: number; pages?: number; faqs?: number };
   newBrands: number;
   totalChanges: number;
   changes: Change[];
@@ -427,7 +427,7 @@ function ExcelSection({ onApplied }: { onApplied: () => void }) {
               <p>
                 <b>{result.fileName}</b>
                 {result.format === "brand-list" ? " (brand list)" : ""}: read {result.rows.brands} brand rows
-                {result.format === "workbook" && `, ${result.rows.statePrices} price rows, ${result.rows.products} Delhi product rows and ${result.rows.pages ?? 0} page sections`}.{" "}
+                {result.format === "workbook" && `, ${result.rows.statePrices} price rows, ${result.rows.products} Delhi product rows, ${result.rows.pages ?? 0} page sections and ${result.rows.faqs ?? 0} FAQs`}.{" "}
                 {result.totalChanges === 0 ? (
                   <b>No changes found.</b>
                 ) : (

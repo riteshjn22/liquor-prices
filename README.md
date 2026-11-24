@@ -104,7 +104,7 @@ state-wise table (official prices and prices added in Excel). Your Excel “Pric
 for brands with no table prices yet.
 ### Excel
 
-**Download Excel** gives one file with four sheets. Edit the **yellow** columns only:
+**Download Excel** gives one file with these sheets. Edit the **yellow** columns only:
 
 | Sheet | What you can do |
 |---|---|
@@ -112,6 +112,7 @@ for brands with no table prices yet.
 | **Prices by state** | One row per brand + variant + size, **one column per state**. Delhi is pre-filled with the official price (grey, can't be changed here); where Delhi is blank you can type your own. **Add a state:** add a column and name it after the state (e.g. `Haryana`), then type prices. Clear a cell to remove that price. Brands without official prices get starter rows (180/375/750 ml; beer 330/500/650 ml); add rows for other variants/sizes with the Brand key, Variant and Size |
 | **Delhi products** | See which official Delhi product is linked to which brand. **Assign to brand** fixes a match (a brand key, or `none` to leave it out); **Variant name** changes the name shown |
 | **Page content** | The About sections and the law page: plain text (blank line = new paragraph) or HTML |
+| **FAQs** | One row per question: **Page key** (a brand key like `rum/old-monk`, or `home`, `prices`, `category:beer`, `law`, `blog`, `post:<slug>`), Question, Answer, **Delete** (`yes` removes it). Shown in row order. Every page in the sheet gets exactly the FAQs listed for it; pages not in the sheet keep theirs. Up to 50 per page. Use this sheet to copy FAQs from your computer to the live site |
 | Read me | Instructions |
 
 **Upload** the file, check the **preview** of every change, then press **Apply**.

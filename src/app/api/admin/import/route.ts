@@ -5,7 +5,7 @@ import { assignBrands } from "@/lib/brand-match";
 import { PRICES_TAG } from "@/lib/config";
 import { planImport, type ImportContext } from "@/lib/excel";
 import { COLLECTIONS, ensureIndexes, getDb } from "@/lib/mongodb";
-import type { BrandDoc, PageContent, ProductDoc, StatePrice } from "@/lib/types";
+import type { BlogPost, BrandDoc, FaqDoc, PageContent, ProductDoc, StatePrice } from "@/lib/types";
 
 export const maxDuration = 60;
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
   const db = await getDb();
   await ensureIndexes(db);
-  const [brands, statePrices, products, pageContent] = await Promise.all([
+  const [brands, statePrices, products, pageContent, faqs, posts] = await Promise.all([
     db.collection<BrandDoc>(COLLECTIONS.brands).find({}, { projection: { _id: 0 } }).toArray(),
     db.collection<StatePrice>(COLLECTIONS.statePrices).find({}, { projection: { _id: 0 } }).toArray(),
     db
@@ -50,8 +50,17 @@ export async function POST(request: Request) {
       .find({}, { projection: { _id: 0, key: 1, state: 1, name: 1, brandKey: 1, isCurrent: 1, brandOverride: 1, label: 1, "sizes.ml": 1, "sizes.mrp": 1, "sizes.isCurrent": 1 } })
       .toArray(),
     db.collection<PageContent>(COLLECTIONS.pageContent).find({}, { projection: { _id: 0 } }).toArray(),
+    db.collection<FaqDoc>(COLLECTIONS.faqs).find({}, { projection: { _id: 0, page: 1, items: 1 } }).toArray(),
+    db.collection<BlogPost>(COLLECTIONS.posts).find({}, { projection: { _id: 0, slug: 1 } }).toArray(),
   ]);
-  const ctx: ImportContext = { brands: brands as BrandDoc[], statePrices: statePrices as StatePrice[], products: products as unknown as ImportContext["products"], pageContent: pageContent as PageContent[] };
+  const ctx: ImportContext = {
+    brands: brands as BrandDoc[],
+    statePrices: statePrices as StatePrice[],
+    products: products as unknown as ImportContext["products"],
+    pageContent: pageContent as PageContent[],
+    faqs: faqs as FaqDoc[],
+    postSlugs: posts.map((p) => p.slug),
+  };
 
   let plan;
   try {
@@ -60,7 +69,7 @@ export async function POST(request: Request) {
     return Response.json({ error: `Could not read the file as Excel: ${(err as Error).message}` }, { status: 400 });
   }
 
-  const writes = plan.brandWrites.length + plan.priceCreates.length + plan.priceUpdates.length + plan.priceDeletes.length + plan.productWrites.length + plan.pageWrites.length;
+  const writes = plan.brandWrites.length + plan.priceCreates.length + plan.priceUpdates.length + plan.priceDeletes.length + plan.productWrites.length + plan.pageWrites.length + plan.faqWrites.length;
   const summary = {
     mode,
     fileName: file.name,
@@ -113,6 +122,11 @@ export async function POST(request: Request) {
     const pages = db.collection<PageContent>(COLLECTIONS.pageContent);
     if (!p.html && !p.title) await pages.deleteOne({ key: p.key });
     else await pages.updateOne({ key: p.key }, { $set: { key: p.key, html: p.html, title: p.title, updatedAt: now } }, { upsert: true });
+  }
+  const faqCol = db.collection<FaqDoc>(COLLECTIONS.faqs);
+  for (const f of plan.faqWrites) {
+    if (!f.items.length) await faqCol.deleteOne({ page: f.page });
+    else await faqCol.updateOne({ page: f.page }, { $set: { page: f.page, items: f.items, updatedAt: now } }, { upsert: true });
   }
   // New brands, renamed brands, match words or manual assignments can all change which products belong where.
   const match = await assignBrands(db);

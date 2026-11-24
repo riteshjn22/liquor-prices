@@ -6,9 +6,9 @@ import { SITE_URL } from "./config";
 import { parseMeasureMl, slugify } from "./normalize";
 import { addPriceGridSheet, GRID_SHEET, planPriceGrid, type GridProduct } from "./price-grid";
 import { findState, stateName } from "./states";
-import { contentSlots } from "./pages";
+import { contentSlots, fixedFaqPages, isFaqPage } from "./pages";
 import { toSafeHtml } from "./rich-text";
-import type { BrandDoc, PageContent, ProductDoc, StatePrice } from "./types";
+import type { BlogPost, BrandDoc, Faq, FaqDoc, PageContent, ProductDoc, StatePrice } from "./types";
 
 /*
  * Excel round-trip for the admin.
@@ -94,14 +94,37 @@ const YES_NO: ExcelJS.DataValidation = { type: "list", allowBlank: true, formula
 export const PAGE_SHEET = "Page content";
 export const PAGE_COLS = { key: "Page key (do not edit)", page: "Page", title: "Page heading", content: "Content (text or HTML)" } as const;
 
+export const FAQ_SHEET = "FAQs";
+export const FAQ_COLS = { page: "Page key", label: "Page", question: "Question", answer: "Answer", delete: "Delete" } as const;
+const FAQ_EDITABLE = new Set<string>([FAQ_COLS.page, FAQ_COLS.question, FAQ_COLS.answer, FAQ_COLS.delete]);
+const FAQ_LIMITS = { perPage: 50, question: 300, answer: 3000 };
+
+/** Readable name for a FAQ page key, e.g. "brand:rum/old-monk" -> "Old Monk (/prices/rum/old-monk)". */
+function faqPageLabel(page: string, brandNames: Map<string, string>, postTitles: Map<string, string>): string {
+  const fixed = fixedFaqPages().find((p) => p.page === page);
+  if (fixed) return `${fixed.label} (${fixed.url})`;
+  if (page.startsWith("brand:")) return `${brandNames.get(page.slice(6)) ?? page.slice(6)} (/prices/${page.slice(6)})`;
+  if (page.startsWith("post:")) return `Blog: ${postTitles.get(page.slice(5)) ?? page.slice(5)} (/blog/${page.slice(5)})`;
+  return page;
+}
+
+/** Order of pages in the FAQs sheet: fixed pages first, then brands A-Z by key, then posts. */
+function faqPageRank(page: string): string {
+  const i = fixedFaqPages().findIndex((p) => p.page === page);
+  if (i >= 0) return `0-${String(i).padStart(3, "0")}`;
+  return page.startsWith("brand:") ? `1-${page}` : `2-${page}`;
+}
+
 export type ExportInput = {
   pageContent?: PageContent[];
+  faqs?: FaqDoc[];
+  posts?: Pick<BlogPost, "slug" | "title">[];
   brands: BrandDoc[];
   statePrices: StatePrice[];
   products: Pick<ProductDoc, "key" | "state" | "name" | "typeName" | "typeSlug" | "isCurrent" | "sizes" | "brandKey" | "autoBrandKey" | "brandOverride" | "label">[];
 };
 
-export async function buildWorkbook({ brands, statePrices, products, pageContent }: ExportInput): Promise<Buffer> {
+export async function buildWorkbook({ brands, statePrices, products, pageContent, faqs, posts }: ExportInput): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Liquor Price Index";
   wb.created = new Date();
@@ -136,6 +159,12 @@ export async function buildWorkbook({ brands, statePrices, products, pageContent
     ["Delhi products sheet: official products from the Delhi excise list", true],
     ["Products are matched to brands automatically by name. To fix a match, type a brand key in 'Assign to brand', or 'none' to leave the product out."],
     ["Variant name: the name shown on the brand page instead of the automatic one."],
+    [""],
+    ["FAQs sheet: one row per question, shown on the page in row order", true],
+    ["Page key: which page the FAQ is on. A brand key (e.g. rum/old-monk, or brand:rum/old-monk), or one of: " + fixedFaqPages().map((p) => p.page).join(", ") + ", or post:<blog post URL slug>."],
+    ["Add a FAQ: add a row with the Page key, Question and Answer. Edit text in place. Move rows to change the order."],
+    ["Remove a FAQ: type 'yes' in Delete (or delete the row, as long as the page still has other rows in the file)."],
+    ["Every page that appears in this sheet gets exactly the FAQs listed here. Pages not in the sheet keep their FAQs. Up to 50 per page."],
   ];
   lines.forEach(([text, bold], i) => {
     const cell = help.getCell(i + 1, 1);
@@ -203,6 +232,31 @@ export async function buildWorkbook({ brands, statePrices, products, pageContent
   }
   styleSheet(cws, new Set<string>([PAGE_COLS.title, PAGE_COLS.content]), { [PAGE_COLS.key]: 26, [PAGE_COLS.page]: 40, [PAGE_COLS.title]: 28, [PAGE_COLS.content]: 90 });
 
+  // --- FAQs (one row per question, any page) ---
+  const fws = wb.addWorksheet(FAQ_SHEET);
+  fws.columns = Object.values(FAQ_COLS).map((h) => ({ header: h, key: h }));
+  const brandNames = new Map(brands.map((b) => [b.key, b.name]));
+  const postTitles = new Map((posts ?? []).map((p) => [p.slug, p.title]));
+  const faqDocs = [...(faqs ?? [])].sort((a, b) => faqPageRank(a.page).localeCompare(faqPageRank(b.page)));
+  for (const doc of faqDocs) {
+    // Brand pages are written as plain brand keys, the same keys used on the other sheets.
+    const pageKey = doc.page.startsWith("brand:") ? doc.page.slice(6) : doc.page;
+    for (const f of doc.items) {
+      const row = fws.addRow({
+        [FAQ_COLS.page]: pageKey,
+        [FAQ_COLS.label]: faqPageLabel(doc.page, brandNames, postTitles),
+        [FAQ_COLS.question]: f.q,
+        [FAQ_COLS.answer]: f.a,
+        [FAQ_COLS.delete]: "",
+      });
+      fillEditable(row, FAQ_EDITABLE);
+      row.getCell(FAQ_COLS.answer).alignment = { wrapText: true, vertical: "top" };
+      row.getCell(FAQ_COLS.question).alignment = { wrapText: true, vertical: "top" };
+      row.getCell(FAQ_COLS.delete).dataValidation = YES_NO;
+    }
+  }
+  styleSheet(fws, FAQ_EDITABLE, { [FAQ_COLS.page]: 30, [FAQ_COLS.label]: 38, [FAQ_COLS.question]: 50, [FAQ_COLS.answer]: 90, [FAQ_COLS.delete]: 9 });
+
   // --- Delhi products ---
   const pws = wb.addWorksheet("Delhi products");
   pws.columns = Object.values(PRODUCT_COLS).map((h) => ({ header: h, key: h }));
@@ -239,7 +293,7 @@ export type ImportChange = { key: string; brand: string; field: string; from: st
 export type BrandWrite = { key: string; isNew: boolean; set: Partial<BrandDoc> };
 export type ImportPlan = {
   format: "workbook" | "brand-list";
-  rows: { brands: number; statePrices: number; products: number; pages: number };
+  rows: { brands: number; statePrices: number; products: number; pages: number; faqs: number };
   changes: ImportChange[];
   errors: ImportIssue[];
   warnings: ImportIssue[];
@@ -250,6 +304,8 @@ export type ImportPlan = {
   productWrites: { key: string; set: Pick<ProductDoc, "brandOverride" | "label"> }[];
   /** Page sections to save (empty html + title removes it). */
   pageWrites: { key: string; html: string; title: string }[];
+  /** Pages whose FAQs are replaced by the FAQs sheet (an empty list removes them). */
+  faqWrites: { page: string; items: Faq[] }[];
 };
 
 export type ImportContext = {
@@ -257,6 +313,9 @@ export type ImportContext = {
   statePrices: StatePrice[];
   products: (GridProduct & Pick<ProductDoc, "brandOverride">)[];
   pageContent: PageContent[];
+  faqs?: FaqDoc[];
+  /** Slugs of existing blog posts (drafts too), for "post:<slug>" FAQ pages. */
+  postSlugs?: string[];
 };
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -335,7 +394,7 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
 
   const plan: ImportPlan = {
     format: "workbook",
-    rows: { brands: 0, statePrices: 0, products: 0, pages: 0 },
+    rows: { brands: 0, statePrices: 0, products: 0, pages: 0, faqs: 0 },
     changes: [],
     errors: [],
     warnings: [],
@@ -345,6 +404,7 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
     priceDeletes: [],
     productWrites: [],
     pageWrites: [],
+    faqWrites: [],
   };
   const brandByKey = new Map(ctx.brands.map((b) => [b.key, b]));
   // Brand keys created earlier in this same upload can be used by the State prices sheet.
@@ -431,8 +491,8 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
     return plan;
   }
 
-  if (!brandsWs && !wb.getWorksheet(GRID_SHEET) && !wb.getWorksheet("State prices") && !wb.getWorksheet("Delhi products")) {
-    plan.errors.push({ sheet: "-", row: 0, message: `No "Brands", "${GRID_SHEET}" or "Delhi products" sheet, and no brand-list sheets (e.g. "Whiskies" with a "Brand" column). Start from a file downloaded from /admin.` });
+  if (!brandsWs && !wb.getWorksheet(GRID_SHEET) && !wb.getWorksheet("State prices") && !wb.getWorksheet("Delhi products") && !wb.getWorksheet(PAGE_SHEET) && !wb.getWorksheet(FAQ_SHEET)) {
+    plan.errors.push({ sheet: "-", row: 0, message: `No "Brands", "${GRID_SHEET}", "${PAGE_SHEET}", "${FAQ_SHEET}" or "Delhi products" sheet, and no brand-list sheets (e.g. "Whiskies" with a "Brand" column). Start from a file downloaded from /admin.` });
     return plan;
   }
 
@@ -637,6 +697,10 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
     }
   }
 
+  // ---------- FAQs sheet (one row per question)
+  const fws = wb.getWorksheet(FAQ_SHEET);
+  if (fws) planFaqs(fws, plan, ctx, brandExists, nameOf);
+
   // ---------- Delhi products sheet
   const pws = wb.getWorksheet("Delhi products");
   if (pws) {
@@ -671,4 +735,82 @@ export async function planImport(file: ArrayBuffer, ctx: ImportContext, opts: { 
   }
 
   return plan;
+}
+
+/**
+ * FAQs sheet: every page named in the sheet gets exactly the FAQs listed for it, in row order.
+ * Rows marked Delete are dropped. Pages not in the sheet keep their FAQs.
+ */
+function planFaqs(ws: ExcelJS.Worksheet, plan: ImportPlan, ctx: ImportContext, brandExists: (key: string) => boolean, nameOf: (key: string) => string) {
+  const h = headerMap(ws);
+  const col = (name: string) => h.get(name.toLowerCase());
+  const pageCol = col(FAQ_COLS.page);
+  const qCol = col(FAQ_COLS.question);
+  const aCol = col(FAQ_COLS.answer);
+  const delCol = col(FAQ_COLS.delete);
+  if (!pageCol || !qCol || !aCol) {
+    plan.errors.push({ sheet: FAQ_SHEET, row: 1, message: `The FAQs sheet needs the "${FAQ_COLS.page}", "${FAQ_COLS.question}" and "${FAQ_COLS.answer}" columns.` });
+    return;
+  }
+  const posts = new Set(ctx.postSlugs ?? []);
+  const lists = new Map<string, { items: Faq[]; rows: number[] }>(); // page -> FAQs in row order
+  const err = (row: number, message: string) => plan.errors.push({ sheet: FAQ_SHEET, row, message });
+
+  ws.eachRow((row, r) => {
+    if (r === 1) return;
+    const raw = cellText(row.getCell(pageCol).value);
+    const q = cellText(row.getCell(qCol).value).replace(/\s+/g, " ");
+    const a = cellText(row.getCell(aCol).value);
+    const del = delCol ? parseYesNo(cellText(row.getCell(delCol).value)) : undefined;
+    if (!raw && !q && !a) return; // empty row
+    plan.rows.faqs++;
+    if (!raw) return void err(r, "Page key is required (e.g. rum/old-monk, home, category:beer).");
+    // A plain brand key ("rum/old-monk") means that brand's page.
+    const key = raw.trim().toLowerCase();
+    const page = /^[a-z0-9-]+\/[a-z0-9-]+$/.test(key) ? `brand:${key}` : key;
+    if (page.startsWith("brand:") && !brandExists(page.slice(6))) return void err(r, `Unknown brand key "${page.slice(6)}".`);
+    if (!isFaqPage(page)) return void err(r, `Unknown page "${raw}". Use a brand key (e.g. rum/old-monk), one of ${fixedFaqPages().map((p) => p.page).join(", ")}, or post:<slug>.`);
+    if (page.startsWith("brand:") && !brandExists(page.slice(6))) return void err(r, `Unknown brand key "${page.slice(6)}".`);
+    if (page.startsWith("post:") && !posts.has(page.slice(5))) return void err(r, `Unknown blog post "${page.slice(5)}".`);
+    if (del === null) return void err(r, `Delete must be "yes" or blank.`);
+
+    const list = lists.get(page) ?? { items: [], rows: [] };
+    lists.set(page, list); // a page with only deleted rows ends up with no FAQs
+    if (del) return;
+    if (!q || !a) return void err(r, "Both the question and the answer are needed (or type 'yes' in Delete).");
+    if (q.length > FAQ_LIMITS.question) return void err(r, `Question is over ${FAQ_LIMITS.question} characters.`);
+    if (a.length > FAQ_LIMITS.answer) return void err(r, `Answer is over ${FAQ_LIMITS.answer} characters.`);
+    if (list.items.some((f) => f.q.toLowerCase() === q.toLowerCase())) {
+      plan.warnings.push({ sheet: FAQ_SHEET, row: r, message: `Same question twice on ${page}; only the first is kept.` });
+      return;
+    }
+    list.items.push({ q, a });
+    list.rows.push(r);
+  });
+
+  const current = new Map((ctx.faqs ?? []).map((d) => [d.page, d.items]));
+  const label = (page: string) =>
+    page.startsWith("brand:") ? nameOf(page.slice(6)) : (fixedFaqPages().find((p) => p.page === page)?.label ?? page);
+  for (const [page, { items, rows }] of lists) {
+    if (items.length > FAQ_LIMITS.perPage) {
+      err(rows[FAQ_LIMITS.perPage], `${page} has ${items.length} FAQs; a page can have up to ${FAQ_LIMITS.perPage}.`);
+      continue;
+    }
+    const before = current.get(page) ?? [];
+    if (same(before, items)) continue;
+    const oldByQ = new Map(before.map((f) => [f.q.toLowerCase(), f.a]));
+    const newQs = new Set(items.map((f) => f.q.toLowerCase()));
+    const added = items.filter((f) => !oldByQ.has(f.q.toLowerCase())).length;
+    const removed = before.filter((f) => !newQs.has(f.q.toLowerCase())).length;
+    const edited = items.filter((f) => oldByQ.has(f.q.toLowerCase()) && oldByQ.get(f.q.toLowerCase()) !== f.a).length;
+    const parts = [added && `${added} new`, edited && `${edited} edited`, removed && `${removed} removed`].filter(Boolean);
+    plan.faqWrites.push({ page, items });
+    plan.changes.push({
+      key: page,
+      brand: label(page),
+      field: "FAQs",
+      from: `${before.length} FAQ${before.length === 1 ? "" : "s"}`,
+      to: `${items.length} FAQ${items.length === 1 ? "" : "s"}${parts.length ? ` (${parts.join(", ")})` : " (new order)"}`,
+    });
+  }
 }
