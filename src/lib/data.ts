@@ -372,6 +372,20 @@ export async function getBlogCategories(): Promise<BlogCategoryWithCount[]> {
 // ---------------------------------------------------------------- home page
 
 /** The four "Explore Information" cards, with admin edits applied over the defaults. */
+/**
+ * Site-wide search engine visibility, switched in the admin (Pages tab).
+ * When hidden, every page is noindex and the sitemap is empty. Visible unless switched off.
+ */
+export async function getSiteVisibility(): Promise<{ indexable: boolean }> {
+  "use cache";
+  cached();
+  const db = await getDb();
+  const doc = await db.collection<{ key: string; indexable?: boolean }>(COLLECTIONS.settings).findOne({ key: SITE_VISIBILITY_KEY }, { projection: { _id: 0, indexable: 1 } });
+  return { indexable: doc?.indexable !== false };
+}
+
+export const SITE_VISIBILITY_KEY = "site:visibility";
+
 export async function getHomeCards(): Promise<HomeCard[]> {
   "use cache";
   cached();

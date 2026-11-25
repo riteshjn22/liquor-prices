@@ -5,6 +5,7 @@ import { preconnect } from "react-dom";
 import { JsonLd } from "@/components/JsonLd";
 import { CATEGORIES } from "@/lib/categories";
 import { SITE_NAME, SITE_TAGLINE, SITE_URL, STATES } from "@/lib/config";
+import { getSiteVisibility } from "@/lib/data";
 import { FEED_PATH, LOCALE, siteGraph } from "@/lib/seo";
 import "./globals.css";
 
@@ -27,7 +28,7 @@ const verification: Metadata["verification"] = {
 };
 
 /** Defaults for every page; each page sets its own title, description, canonical and share tags (lib/seo.ts). */
-export const metadata: Metadata = {
+const BASE_METADATA: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: `${SITE_NAME} | ${SITE_TAGLINE}`,
@@ -49,6 +50,16 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false, email: false, address: false },
   ...(Object.keys(verification).length ? { verification } : {}),
 };
+
+/**
+ * "Hide from search engines" in the admin (Pages tab) puts noindex, nofollow on every page.
+ * Pages that set their own robots tag are already noindex (empty or placeholder pages).
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const { indexable } = await getSiteVisibility();
+  if (indexable) return BASE_METADATA;
+  return { ...BASE_METADATA, robots: { index: false, follow: false, googleBot: { index: false, follow: false } } };
+}
 
 export const viewport: Viewport = {
   width: "device-width",

@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { CATEGORIES } from "@/lib/categories";
 import { SITE_URL } from "@/lib/config";
 import { coverUrl } from "@/lib/cover";
-import { getBlogCategories, getPageContent, getPublishedPosts, getSitemapEntries } from "@/lib/data";
+import { getBlogCategories, getPageContent, getPublishedPosts, getSitemapEntries, getSiteVisibility } from "@/lib/data";
 import { imageKitEnabled, imageKitUrl } from "@/lib/imagekit";
 import { latestDate } from "@/lib/seo";
 
@@ -12,6 +12,8 @@ import { latestDate } from "@/lib/seo";
  * Well under the 50,000-URL limit per sitemap.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // Hidden from search engines (admin switch): list nothing.
+  if (!(await getSiteVisibility()).indexable) return [];
   const [brands, posts, blogCategories, law] = await Promise.all([getSitemapEntries(), getPublishedPosts(), getBlogCategories(), getPageContent("law:body")]);
 
   const brandDate = (category?: string) => latestDate(brands.filter((b) => !category || b.category === category).map((b) => b.updatedAt));

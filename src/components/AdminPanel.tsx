@@ -5,6 +5,7 @@ import { BlogManager } from "./admin/BlogManager";
 import { BrandContentEditor } from "./admin/BrandContentEditor";
 import { FaqManager } from "./admin/FaqManager";
 import { HomeCardsEditor } from "./admin/HomeCardsEditor";
+import { SearchVisibility } from "./admin/SearchVisibility";
 import { PagesManager } from "./admin/PagesManager";
 
 type Category = { slug: string; name: string };
@@ -74,6 +75,7 @@ export function AdminPanel({ categories, faqPages }: { categories: Category[]; f
       {tab === "brands" && <BrandManager categories={categories} reloadKey={reloadKey} />}
       {tab === "pages" && (
         <>
+          <SearchVisibility />
           <HomeCardsEditor />
           <PagesManager />
         </>

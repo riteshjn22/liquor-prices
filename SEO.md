@@ -27,6 +27,7 @@ All `@id`s are absolute URLs, so search engines can join the pieces (page → si
 - Twitter / X: `summary_large_image` card with title, description, image
 - `max-image-preview:large`, `max-snippet:-1` for Google (large image previews in results)
 - `noindex` (still followed) on: empty law page, blog categories without posts, 404 pages, the admin
+- **Whole-site switch** in the admin (Pages → Search engines): Noindex puts `noindex, nofollow` on every page, empties the sitemap and drops it from robots.txt; Index restores everything
 - RSS feed link in every page's `<head>`
 - Optional Google / Bing ownership tags: set `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` in Vercel
 - `lang="en-IN"`, viewport, theme colour, no auto-linking of phone numbers
