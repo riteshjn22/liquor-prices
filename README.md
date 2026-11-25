@@ -139,8 +139,11 @@ for brands with no table prices yet.
 3. *Network Access*: add `0.0.0.0/0` (Vercel's IPs are not fixed).
 4. *Connect → Drivers*: copy the connection string, e.g.
    `mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority`
-5. **Load data before the first deploy** (the build prerenders brand pages from it): put that string in
-   `.env.local` as `MONGODB_URI`, run `npm run sync`, then `npm run dev`, open `/admin` and upload your brand list.
+5. **Copy your local data to Atlas before the first deploy** (the build prerenders brand pages from it).
+   With the local database running (`npm run db`):
+   `npm run db:copy -- "mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/"`
+   This copies everything: brands, prices, Delhi products, FAQs, page content, blog posts and categories, settings.
+   It refuses to write into a database that already has data; add `--replace` to overwrite it on purpose.
 
 ### 2. Push to GitHub
 
@@ -166,8 +169,12 @@ git push -u origin main
    | `NEXT_PUBLIC_SITE_TAGLINE` | optional tagline under the name |
    | `CRON_SECRET` | long random string |
    | `REVALIDATE_SECRET` | another long random string |
-   | `ADMIN_PASSWORD` | password for `/admin` (8+ characters) |
+   | `ADMIN_USER` | admin login name (default `admin`) |
+   | `ADMIN_PASSWORD` | password for `/admin` (8+ characters; without it the admin is switched off) |
    | `NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT` | optional, see ImageKit below |
+   | `GOOGLE_SITE_VERIFICATION` / `BING_SITE_VERIFICATION` | optional, search console ownership codes |
+
+   Do **not** add `IMAGEKIT_PRIVATE_KEY` or `SITE_URL_FOR_REVALIDATE` to Vercel: they are only for scripts on your computer.
 
 3. Deploy. `vercel.json` already:
    - runs functions in **Mumbai (`bom1`)**, close to the Delhi server and to Atlas;
